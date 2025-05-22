@@ -43,9 +43,9 @@ const registerUser = async (req, res) => {
       // Encrypt email and insert
       await client.query(
         `INSERT INTO user_email(user_id, email, email_hash)
-         VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key(), 'cipher-algo=aes256'), $3)`,
+         VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()), $3)`,
         [newUserId, email, emailHash]
-      );
+      );      
 
       // Hash password, encrypt, and insert
       const hashedPassword = await bcrypt.hash(password, 10);
