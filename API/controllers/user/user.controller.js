@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool, setEncryptionKey } = require('../../db');
-const verifyToken = require('../utils/middleware');
+const verifyToken = require('../../routes/utils/middleware');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
