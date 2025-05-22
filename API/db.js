@@ -2,13 +2,13 @@ const { Pool } = require('pg');
 const AWS = require('aws-sdk');
 
 const pool = new Pool({
-  connectionString: process.env.POSTGRES_PRISMA_URL, // use your full Neon URL here
+  connectionString: process.env.POSTGRES_PRISMA_URL, // your Neon URL
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
   ssl: {
-    rejectUnauthorized: false // Neon requires this for SSL in node
-  }
+    rejectUnauthorized: false, // required for Neon SSL
+  },
 });
 
 AWS.config.update({
@@ -30,7 +30,6 @@ pool.on('error', (err) => {
   process.exit(1);
 });
 
-// Helper function to query with encryption key set on connection
 async function query(text, params) {
   const client = await pool.connect();
   try {

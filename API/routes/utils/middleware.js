@@ -3,9 +3,8 @@ const { pool, setEncryptionKey } = require('../../db');
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.header('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!authHeader?.startsWith('Bearer '))
     return res.status(401).json({ error: 'Authorization token missing or malformed.' });
-  }
 
   try {
     const { uid, sid } = jwt.verify(authHeader.slice(7).trim(), process.env.JWT_SECRET);
@@ -19,6 +18,7 @@ const verifyToken = async (req, res, next) => {
     const client = await pool.connect();
     try {
       await setEncryptionKey(client);
+
       const { rowCount } = await client.query(
         `SELECT 1 FROM user_identity u
          JOIN user_session_user su ON u.user_id = su.user_id

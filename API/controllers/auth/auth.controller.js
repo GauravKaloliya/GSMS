@@ -9,7 +9,7 @@ const hashEmail = (email) => {
 const runWithClient = async (handler) => {
   const client = await pool.connect();
   try {
-    await setEncryptionKey(client); // sets pg.encrypt_key from env variable internally
+    await setEncryptionKey(client);
     return await handler(client);
   } finally {
     client.release();
@@ -22,12 +22,11 @@ const registerUser = async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const normalizedEmail = email.toLowerCase();
-  const emailHash = hashEmail(normalizedEmail);
+  const emailHash = hashEmail(email); // Buffer
 
   try {
     const userId = await runWithClient(async (client) => {
-      // Check if email already exists
+      // Check for existing email
       const existing = await client.query(
         `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
@@ -36,7 +35,7 @@ const registerUser = async (req, res) => {
         throw new Error('Email already registered');
       }
 
-      // Insert new user identity and get user_id
+      // Insert user_identity and get user_id (UUID)
       const insertUserRes = await client.query(
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
@@ -46,7 +45,7 @@ const registerUser = async (req, res) => {
       await client.query(
         `INSERT INTO user_email(user_id, email, email_hash)
          VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()), $3)`,
-        [newUserId, normalizedEmail, emailHash]
+        [newUserId, Buffer.from(email), emailHash]
       );
 
       // Hash password and encrypt it
@@ -76,8 +75,7 @@ const loginUser = async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const normalizedEmail = email.toLowerCase();
-  const emailHash = hashEmail(normalizedEmail);
+  const emailHash = hashEmail(email);
 
   try {
     const userId = await runWithClient(async (client) => {
