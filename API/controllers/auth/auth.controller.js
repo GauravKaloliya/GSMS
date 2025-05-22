@@ -30,57 +30,54 @@ const runWithClient = async (handler) => {
  * Registers a new user: creates identity, stores encrypted email & hashed password.
  */
 const registerUser = async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
-  const emailHash = hashEmail(email); // Buffer for querying
-
-  try {
-    const userId = await runWithClient(async (client) => {
-      // Check if email is already registered (valid_to IS NULL means active)
-      const existing = await client.query(
-        `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
-        [emailHash]
-      );
-      if (existing.rowCount > 0) {
-        throw new Error('Email already registered');
-      }
-
-      // Create new user identity
-      const insertUserRes = await client.query(
-        `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
-      );
-      const newUserId = insertUserRes.rows[0].user_id;
-
-      // Convert email to base64 for pgp_sym_encrypt's decode function
-      const emailBase64 = Buffer.from(email).toString('base64');
-
-      // Insert encrypted email and its hash
-      await client.query(
-        `INSERT INTO user_email (user_id, email, email_hash)
-         VALUES ($1, pgp_sym_encrypt(decode($2, 'base64'), get_encrypt_key()), $3)`,
-        [newUserId, emailBase64, emailHash]
-      );
-
-      // Hash password with bcrypt and store encrypted
-      const hashedPassword = await bcrypt.hash(password, 10);
-      await client.query(
-        `INSERT INTO user_password (user_id, password_hash)
-         VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()))`,
-        [newUserId, hashedPassword]
-      );
-
-      return newUserId;
-    });
-
-    res.status(201).json({ user_id: userId });
-  } catch (e) {
-    console.error('Registration error:', e.message);
-    res.status(400).json({ error: e.message || 'User creation failed' });
-  }
-};
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+  
+    const emailHash = hashEmail(email);
+  
+    try {
+      const userId = await runWithClient(async (client) => {
+        const existing = await client.query(
+          `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
+          [emailHash]
+        );
+        if (existing.rowCount > 0) {
+          throw new Error('Email already registered');
+        }
+  
+        const insertUserRes = await client.query(
+          `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
+        );
+        const newUserId = insertUserRes.rows[0].user_id;
+  
+        // Pass email as Buffer directly
+        const emailBuffer = Buffer.from(email.toLowerCase());
+  
+        await client.query(
+          `INSERT INTO user_email(user_id, email, email_hash)
+           VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()), $3)`,
+          [newUserId, emailBuffer, emailHash]
+        );
+  
+        const hashedPassword = await bcrypt.hash(password, 10);
+  
+        await client.query(
+          `INSERT INTO user_password(user_id, password_hash)
+           VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()))`,
+          [newUserId, hashedPassword]
+        );
+  
+        return newUserId;
+      });
+  
+      res.status(201).json({ user_id: userId });
+    } catch (e) {
+      console.error('Registration error:', e.message);
+      res.status(400).json({ error: e.message || 'User creation failed' });
+    }
+  };  
 
 /**
  * Logs in a user by verifying password and logging the attempt.
