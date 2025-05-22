@@ -9,22 +9,21 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Basic health check
 app.get('/', (req, res) => {
   res.send('API Server Running');
 });
 
 // Auth & Identity Management
-const userIdentityRoutes = require('./routes/identity/userIdentity');
-app.use('/api/identity', userIdentityRoutes);
+const userIdentityRoutes = require('./routes/user/userIdentity');
+app.use('/api/', userIdentityRoutes);
 
-const userEmailRoutes = require('./routes/identity/userEmail');
+const userEmailRoutes = require('./routes/user/userEmail');
 app.use('/api/email', userEmailRoutes);
 
-const userPasswordRoutes = require('./routes/identity/userPassword');
+const userPasswordRoutes = require('./routes/user/userPassword');
 app.use('/api/password', userPasswordRoutes);
 
-const userProfileRoutes = require('./routes/identity/userProfile');
+const userProfileRoutes = require('./routes/user/userProfile');
 app.use('/api/profile', userProfileRoutes);
 
 // Session Management
