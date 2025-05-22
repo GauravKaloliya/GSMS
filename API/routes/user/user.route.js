@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const verifyToken = require('../utils/middleware');
 
-const userController = require('../controllers/userController');
+const userController = require('../controllers/user/user.controller');
 
 // -- USER IDENTITY ROUTES --
 router.post('/register', userController.registerUser);
