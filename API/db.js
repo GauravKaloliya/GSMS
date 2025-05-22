@@ -2,7 +2,7 @@ const { Pool } = require('pg');
 const AWS = require('aws-sdk');
 
 const pool = new Pool({
-  connectionString: process.env.POSTGRES_PRISMA_URL, // your Neon URL
+  connectionString: process.env.POSTGRES_PRISMA_URL, // Neon or other Postgres URL
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
@@ -11,6 +11,7 @@ const pool = new Pool({
   },
 });
 
+// Configure AWS SDK with credentials and region
 AWS.config.update({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -19,6 +20,11 @@ AWS.config.update({
 
 const s3 = new AWS.S3();
 
+/**
+ * Set the PostgreSQL encryption key for pgcrypto operations.
+ * Must be called per connection before any encryption-related queries.
+ * @param {import('pg').PoolClient} client
+ */
 async function setEncryptionKey(client) {
   const key = process.env.PG_ENCRYPT_KEY;
   if (!key) throw new Error('Encryption key must be provided');
@@ -30,12 +36,17 @@ pool.on('error', (err) => {
   process.exit(1);
 });
 
+/**
+ * Helper query function that automatically sets encryption key on connection.
+ * @param {string} text SQL query text
+ * @param {Array} params Query parameters
+ * @returns {Promise<import('pg').QueryResult>}
+ */
 async function query(text, params) {
   const client = await pool.connect();
   try {
     await setEncryptionKey(client);
-    const res = await client.query(text, params);
-    return res;
+    return await client.query(text, params);
   } finally {
     client.release();
   }
