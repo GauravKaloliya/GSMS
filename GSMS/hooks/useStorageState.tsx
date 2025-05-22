@@ -4,12 +4,10 @@ import { Platform } from 'react-native';
 
 type UseStateHook<T> = [[boolean, T | null], (value: T | null) => void];
 
-function useAsyncState<T>(
-  initialValue: [boolean, T | null] = [true, null],
-): UseStateHook<T> {
+function useAsyncState<T>(initialValue: T | null = null): UseStateHook<T> {
   return useReducer(
-    (state: [boolean, T | null], action: T | null = null): [boolean, T | null] => [false, action],
-    initialValue
+    (_: [boolean, T | null], action: T | null): [boolean, T | null] => [false, action],
+    [true, initialValue]
   ) as UseStateHook<T>;
 }
 
@@ -25,7 +23,7 @@ export async function setStorageItemAsync(key: string, value: string | null) {
       console.error('Local storage is unavailable:', e);
     }
   } else {
-    if (value == null) {
+    if (value === null) {
       await SecureStore.deleteItemAsync(key);
     } else {
       await SecureStore.setItemAsync(key, value);
@@ -34,7 +32,7 @@ export async function setStorageItemAsync(key: string, value: string | null) {
 }
 
 export function useStorageState(key: string): UseStateHook<string> {
-  const [state, setState] = useAsyncState<string>();
+  const [state, setState] = useAsyncState<string>(null);
 
   useEffect(() => {
     if (Platform.OS === 'web') {

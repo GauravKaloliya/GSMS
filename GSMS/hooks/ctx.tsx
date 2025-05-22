@@ -1,45 +1,53 @@
 import { use, createContext, type PropsWithChildren } from 'react';
 import { useStorageState } from './useStorageState';
+import { router } from 'expo-router';
 
-const AuthContext = createContext<{
+// Context type definition
+type AuthContextType = {
   signIn: () => void;
   signOut: () => void;
   session?: string | null;
   isLoading: boolean;
-}>({
-  signIn: () => null,
-  signOut: () => null,
-  session: null,
-  isLoading: false,
-});
+  isSignedIn: boolean;
+};
 
-// This hook can be used to access the user info.
+// Create context
+const AuthContext = createContext<AuthContextType | null>(null);
+
+// Custom hook to use context
 export function useSession() {
-  const value = use(AuthContext);
-  if (!value) {
-    throw new Error('useSession must be wrapped in a <SessionProvider />');
+  const context = use(AuthContext);
+  if (!context) {
+    throw new Error('useSession must be used within a <SessionProvider />');
   }
-
-  return value;
+  return context;
 }
 
+// Provider component
 export function SessionProvider({ children }: PropsWithChildren) {
   const [[isLoading, session], setSession] = useStorageState('session');
 
+  const signIn = () => {
+    setSession('mock-session-token');
+    router.replace('/');
+  };
+
+  const signOut = () => {
+    setSession(null);
+    router.replace('/signin');
+  };
+
   return (
-    <AuthContext
+    <AuthContext.Provider
       value={{
-        signIn: () => {
-          // Perform sign-in logic here
-          setSession('xxx');
-        },
-        signOut: () => {
-          setSession(null);
-        },
+        signIn,
+        signOut,
         session,
         isLoading,
-      }}>
+        isSignedIn: !!session,
+      }}
+    >
       {children}
-    </AuthContext>
+    </AuthContext.Provider>
   );
 }
