@@ -1,7 +1,4 @@
-const express = require('express');
-const router = express.Router();
 const { pool, setEncryptionKey } = require('../../db');
-const verifyToken = require('../../routes/utils/middleware');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
@@ -35,9 +32,9 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// -- USER IDENTITY ROUTES --
+// -- CONTROLLER FUNCTIONS --
 
-router.post('/register', async (req, res) => {
+async function registerUser(req, res) {
   let client;
   try {
     client = await pool.connect();
@@ -46,7 +43,7 @@ router.post('/register', async (req, res) => {
     const { rows } = await client.query(
       'INSERT INTO user_identity DEFAULT VALUES RETURNING user_id'
     );
-
+    
     await client.query('COMMIT');
     res.status(201).json({ user_id: rows[0].user_id });
   } catch (err) {
@@ -56,11 +53,9 @@ router.post('/register', async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
 
-// -- USER EMAIL ROUTES --
-
-router.post('/email', verifyToken, async (req, res) => {
+async function addOrUpdateEmail(req, res) {
   const { uid } = req.user;
   const { email } = req.body;
 
@@ -93,9 +88,9 @@ router.post('/email', verifyToken, async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
 
-router.get('/email', verifyToken, async (req, res) => {
+async function getCurrentEmail(req, res) {
   const { uid } = req.user;
   let client;
 
@@ -120,11 +115,9 @@ router.get('/email', verifyToken, async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
 
-// -- USER PASSWORD ROUTES --
-
-router.post('/password', verifyToken, async (req, res) => {
+async function setOrUpdatePassword(req, res) {
   const { uid } = req.user;
   const { password } = req.body;
 
@@ -160,11 +153,9 @@ router.post('/password', verifyToken, async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
 
-// -- USER PROFILE ROUTES --
-
-router.get('/profile', verifyToken, async (req, res) => {
+async function getProfile(req, res) {
   const { uid } = req.user;
   let client;
 
@@ -189,9 +180,9 @@ router.get('/profile', verifyToken, async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
 
-router.put('/profile', verifyToken, async (req, res) => {
+async function updateProfile(req, res) {
   const { uid } = req.user;
   const { first_name, last_name, profile_image, phone_number } = req.body;
   let client;
@@ -232,7 +223,7 @@ router.put('/profile', verifyToken, async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
 
 module.exports = {
   registerUser,
