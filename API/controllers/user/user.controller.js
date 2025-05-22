@@ -30,19 +30,6 @@ const expireValidRecord = (client, table, user_id) => {
   return client.query(`UPDATE ${table} SET valid_to = now() WHERE user_id = $1 AND valid_to IS NULL`, [user_id]);
 };
 
-const registerUser = async (req, res) => {
-  try {
-    const { user_id } = await runWithClient(
-      client => client.query('INSERT INTO user_identity DEFAULT VALUES RETURNING user_id').then(r => r.rows[0]),
-      true
-    );
-    res.status(201).json({ user_id });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'User creation failed' });
-  }
-};
-
 const addOrUpdateEmail = async (req, res) => {
   const { uid } = req.user, { email } = req.body;
   if (!EMAIL_REGEX.test(email || '')) return res.status(400).json({ error: 'Valid email required' });
@@ -141,7 +128,6 @@ const updateProfile = async (req, res) => {
 };
 
 module.exports = {
-  registerUser,
   addOrUpdateEmail,
   getCurrentEmail,
   setOrUpdatePassword,

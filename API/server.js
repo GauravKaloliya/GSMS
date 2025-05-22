@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const authRoutes = require('./routes/auth/auth.route');
 const userRoutes = require('./routes/user/user.route');
 const middleware = require('./routes/utils/middleware');
 
@@ -11,8 +12,10 @@ app.use(express.json());
 
 app.get('/', (req, res) => res.send('API Server Running'));
 
-app.use('/api', userRoutes);
+app.use('/api', authRoutes);
 app.use(middleware);
+app.use('/api/user', userRoutes);
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
