@@ -79,58 +79,59 @@ async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
-  const rawBody = await captureRawBody(req);
+  // Don't await here
+  // Instead, capture raw body after response ends inside onFinished
 
-  // Fire-and-forget DB logging after response ends
-  onFinished(res, () => {
-    (async () => {
-      try {
-        const endTime = Date.now();
-        const compressedReq = compressIfLarge(rawBody);
-        const resBody = res.locals.responseBody || Buffer.alloc(0);
-        const compressedRes = compressIfLarge(resBody);
+  onFinished(res, async () => {
+    try {
+      // Now read raw body here, after response ends
+      const rawBody = await captureRawBody(req);
 
-        await runWithTransaction(async (q) => {
-          await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
+      const endTime = Date.now();
+      const compressedReq = compressIfLarge(rawBody);
+      const resBody = res.locals.responseBody || Buffer.alloc(0);
+      const compressedRes = compressIfLarge(resBody);
 
-          await q(
-            `INSERT INTO api_request_event (
-              request_id, user_id, api_key_id, session_id, request_time,
-              http_method, endpoint, query_params, request_headers, request_body,
-              ip_address, user_agent, response_time, http_status, response_headers,
-              response_body, response_size_bytes
-            ) VALUES (
-              $1, $2, $3, $4, to_timestamp($5 / 1000.0), $6, $7, $8, $9, $10,
-              $11, $12, to_timestamp($13 / 1000.0), $14, $15, $16, $17
-            )`,
-            [
-              requestId,
-              req.user?.uid || null,
-              req.apiKeyId || null,
-              req.user?.sid || null,
-              startTime,
-              req.method,
-              req.originalUrl,
-              safeStringify(req.query),
-              safeStringify(req.headers),
-              compressedReq,
-              req.ip,
-              req.headers['user-agent'] || null,
-              endTime,
-              res.statusCode,
-              safeStringify(res.getHeaders()),
-              compressedRes,
-              Number(res.getHeader('content-length')) || null,
-            ]
-          );
-        });
-      } catch (err) {
-        console.warn('[Non-blocking log failure]', err.message);
-      }
-    })();
+      await runWithTransaction(async (q) => {
+        await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
+
+        await q(
+          `INSERT INTO api_request_event (
+            request_id, user_id, api_key_id, session_id, request_time,
+            http_method, endpoint, query_params, request_headers, request_body,
+            ip_address, user_agent, response_time, http_status, response_headers,
+            response_body, response_size_bytes
+          ) VALUES (
+            $1, $2, $3, $4, to_timestamp($5 / 1000.0), $6, $7, $8, $9, $10,
+            $11, $12, to_timestamp($13 / 1000.0), $14, $15, $16, $17
+          )`,
+          [
+            requestId,
+            req.user?.uid || null,
+            req.apiKeyId || null,
+            req.user?.sid || null,
+            startTime,
+            req.method,
+            req.originalUrl,
+            safeStringify(req.query),
+            safeStringify(req.headers),
+            compressedReq,
+            req.ip,
+            req.headers['user-agent'] || null,
+            endTime,
+            res.statusCode,
+            safeStringify(res.getHeaders()),
+            compressedRes,
+            Number(res.getHeader('content-length')) || null,
+          ]
+        );
+      });
+    } catch (err) {
+      console.warn('[Non-blocking log failure]', err.message);
+    }
   });
 
-  next();
+  next(); // immediately pass to next middleware without waiting
 }
 
 module.exports = {
