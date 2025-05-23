@@ -79,9 +79,6 @@ async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
-  // Don't await here
-  // Instead, capture raw body after response ends inside onFinished
-
   onFinished(res, async () => {
     try {
       // Now read raw body here, after response ends
@@ -92,6 +89,7 @@ async function logApiRequest(req, res, next) {
       const resBody = res.locals.responseBody || Buffer.alloc(0);
       const compressedRes = compressIfLarge(resBody);
 
+      console.log(`[${endTime - startTime}ms] ${req.method} ${req.originalUrl} ${res.statusCode}`);
       await runWithTransaction(async (q) => {
         await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
 
