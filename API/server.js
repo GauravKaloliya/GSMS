@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { captureResponseBody, logApiRequest } = require('./controllers/api/api.controller');
+const { captureResponseBody, logApiRequest } = require('./routes/utils/apiRequest');
 const middleware = require('./routes/utils/middleware');
 const authRoutes = require('./routes/auth/auth.route');
 const userRoutes = require('./routes/user/user.route');

@@ -1,5 +1,3 @@
-// src/utils/api.tsx
-
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -8,7 +6,6 @@ export type ApiResponse<T> = {
   [key: string]: any;
 } & T;
 
-// Base API URL
 const API_BASE_URL: string = process.env.API_BASE_URL || 'https://gsms-ten.vercel.app/api';
 
 // ---- In-memory token cache ----
@@ -89,9 +86,14 @@ export async function apiRequest<T>(
       signal: controller.signal,
     });
 
-    const data: ApiResponse<T> = await response.json().catch(() => {
+    const text = await response.text();
+
+    let data: ApiResponse<T>;
+    try {
+      data = JSON.parse(text);
+    } catch {
       throw new Error('Invalid JSON response');
-    });
+    }
 
     if (!response.ok) {
       const errMsg = data?.error || `API request failed with status ${response.status}`;
