@@ -36,12 +36,6 @@ pool.on('error', (err) => {
   process.exit(1);
 });
 
-/**
- * Helper query function that automatically sets encryption key on connection.
- * @param {string} text SQL query text
- * @param {Array} params Query parameters
- * @returns {Promise<import('pg').QueryResult>}
- */
 async function query(text, params) {
   const client = await pool.connect();
   try {
