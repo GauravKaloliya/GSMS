@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { loginUser, registerUser } from '../hooks/apiClient';
+import { router } from 'expo-router';
 
 
 export default function SignInScreen() {
@@ -87,9 +88,11 @@ export default function SignInScreen() {
     try {
       if (mode === 'signIn') {
         const data = await loginUser(email, password);
-        console.log(data);
-        Alert.alert('Success', `Welcome back, user #${data.user_id}`);
-        // You can navigate or update app state here after login
+        
+        if (data) {
+          Alert.alert('Success', `Welcome back, user #${data.user_id}`);
+          router.replace('/');
+        }
         resetForm();
       } else {
         const data = await registerUser(email, password);

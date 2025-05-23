@@ -1,5 +1,4 @@
-// HomeScreen.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,15 +8,24 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
-
-// Import removeToken from tokenHelpers
-import { removeToken } from '../../hooks/apiClient';
+import { getToken, removeToken } from '../../hooks/apiClient';
 
 export default function HomeScreen() {
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = await getToken();
+      if (!token) {
+        router.replace('/signin'); // Redirect to sign-in if no token
+      }
+    };
+
+    checkAuth();
+  }, []);
+
   const handleSignOut = async () => {
     try {
-      await removeToken();  // clears the token from storage
-      router.replace('/signin'); // navigate to login screen, reset history stack
+      await removeToken();
+      router.replace('/signin');
     } catch (error) {
       console.error('Sign out error:', error);
     }

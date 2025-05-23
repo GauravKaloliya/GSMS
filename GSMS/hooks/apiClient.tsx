@@ -1,3 +1,5 @@
+// src/utils/api.tsx
+
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -6,51 +8,65 @@ export type ApiResponse<T> = {
   [key: string]: any;
 } & T;
 
-const API_BASE_URL = process.env.API_BASE_URL || '';
+// Base API URL
+const API_BASE_URL: string = process.env.API_BASE_URL || 'https://gsms-ten.vercel.app/api';
 
-// Async token helpers to handle both web and native securely
+// ---- In-memory token cache ----
+let cachedToken: string | null = null;
+
+// ---- Token helpers ----
 export async function getToken(): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    try {
-      return localStorage.getItem('session');
-    } catch {
-      return null;
+  if (cachedToken) return cachedToken;
+
+  try {
+    if (Platform.OS === 'web') {
+      cachedToken = localStorage.getItem('session');
+    } else {
+      cachedToken = await SecureStore.getItemAsync('session');
     }
-  } else {
-    return await SecureStore.getItemAsync('session');
+  } catch (err) {
+    console.error('Failed to read token', err);
+    cachedToken = null;
   }
+  return cachedToken;
 }
 
 export async function setToken(token: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    try {
+  cachedToken = token;
+
+  try {
+    if (Platform.OS === 'web') {
       localStorage.setItem('session', token);
-    } catch {
-      // optionally log or handle errors
+    } else {
+      await SecureStore.setItemAsync('session', token);
     }
-  } else {
-    await SecureStore.setItemAsync('session', token);
+  } catch (err) {
+    console.error('Failed to store token', err);
   }
 }
 
 export async function removeToken(): Promise<void> {
-  if (Platform.OS === 'web') {
-    try {
+  cachedToken = null;
+  try {
+    if (Platform.OS === 'web') {
       localStorage.removeItem('session');
-    } catch {
-      // optionally log or handle errors
+    } else {
+      await SecureStore.deleteItemAsync('session');
     }
-  } else {
-    await SecureStore.deleteItemAsync('session');
+  } catch (err) {
+    console.error('Failed to remove token', err);
   }
 }
 
-// General API request helper
+// ---- General API request helper ----
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
 export async function apiRequest<T>(
   endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+  method: HttpMethod = 'GET',
   body?: any,
-  authRequired = false
+  authRequired = false,
+  timeoutMs = 10000
 ): Promise<T> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -58,51 +74,62 @@ export async function apiRequest<T>(
 
   if (authRequired) {
     const token = await getToken();
-    if (!token) {
-      throw new Error('No auth token found');
-    }
+    if (!token) throw new Error('No auth token found');
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  let data: ApiResponse<T>;
   try {
-    data = await response.json();
-  } catch {
-    throw new Error('Invalid JSON response');
-  }
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    const errMsg = data.error || `API request failed with status ${response.status}`;
-    throw new Error(errMsg);
-  }
+    const data: ApiResponse<T> = await response.json().catch(() => {
+      throw new Error('Invalid JSON response');
+    });
 
-  return data;
+    if (!response.ok) {
+      const errMsg = data?.error || `API request failed with status ${response.status}`;
+      throw new Error(errMsg);
+    }
+
+    return data;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-// Auth API calls
-
-export async function registerUser(email: string, password: string): Promise<{ user_id: string }> {
+// ---- Auth API calls ----
+export async function registerUser(
+  email: string,
+  password: string
+): Promise<{ user_id: string }> {
   return apiRequest<{ user_id: string }>('/register', 'POST', { email, password });
 }
 
-export async function loginUser(email: string, password: string): Promise<{ token: string; user_id: string }> {
-  const data = await apiRequest<{ token: string; user_id: string }>('/login', 'POST', { email, password });
+export async function loginUser(
+  email: string,
+  password: string
+): Promise<{ token: string; user_id: string }> {
+  const data = await apiRequest<{ token: string; user_id: string }>(
+    '/login',
+    'POST',
+    { email, password }
+  );
   await setToken(data.token);
   return data;
 }
 
-// Example of authenticated API call
-export async function getProtectedData(): Promise<any> {
-  return apiRequest('/protected/data', 'GET', undefined, true);
-}
-
-// Logout helper clears stored token
 export async function logout(): Promise<void> {
   await removeToken();
 }
