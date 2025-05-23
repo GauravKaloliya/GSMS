@@ -45,6 +45,8 @@ async function query(text, params = []) {
 }
 
 async function runWithTransaction(callback) {
+  const client = await pool.connect();
+  
   try {
     await setEncryptionKey(client);
 
