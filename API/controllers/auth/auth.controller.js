@@ -17,6 +17,9 @@ const registerUser = async (req, res) => {
 
   try {
     const userId = await runWithTransaction(async (query) => {
+      const keyRes = await query(`SELECT current_setting('pg.encrypt_key') AS key`);
+      console.log('PG encryption key in session:', keyRes.rows[0].key);
+
       const existing = await query(
         `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
