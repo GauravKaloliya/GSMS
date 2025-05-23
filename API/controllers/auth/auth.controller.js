@@ -17,9 +17,6 @@ const registerUser = async (req, res) => {
 
   try {
     const userId = await runWithTransaction(async (query) => {
-      const keyRes = await query(`SELECT current_setting('pg.encrypt_key') AS key`);
-      console.log('PG encryption key in session:', keyRes.rows[0].key);
-
       const existing = await query(
         `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
@@ -32,8 +29,7 @@ const registerUser = async (req, res) => {
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
       const newUserId = insertUserRes.rows[0].user_id;
-      console.log('New user ID:', newUserId);
-
+      
       await query(
         `INSERT INTO user_email(user_id, email, email_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
@@ -41,8 +37,7 @@ const registerUser = async (req, res) => {
       );
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      console.log('Hashed password:', hashedPassword);
-
+      
       await query(
         `INSERT INTO user_password(user_id, password_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')))`,
