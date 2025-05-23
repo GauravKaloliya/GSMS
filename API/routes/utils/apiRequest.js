@@ -23,6 +23,7 @@ function compressIfLarge(buf) {
   }
 }
 
+// Capture raw body without blocking next()
 function captureRawBody(req) {
   return new Promise((resolve) => {
     const chunks = [];
@@ -79,20 +80,28 @@ async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
+  // Start capturing raw body immediately, non-blocking
+  captureRawBody(req).then((rawBody) => {
+    res.locals.rawBody = rawBody;
+  });
+
   onFinished(res, async () => {
     try {
-      // Now read raw body here, after response ends
-      const rawBody = await captureRawBody(req);
-
       const endTime = Date.now();
+
+      const rawBody = res.locals.rawBody || Buffer.alloc(0);
       const compressedReq = compressIfLarge(rawBody);
       const resBody = res.locals.responseBody || Buffer.alloc(0);
       const compressedRes = compressIfLarge(resBody);
 
       console.log(`[${endTime - startTime}ms] ${req.method} ${req.originalUrl} ${res.statusCode}`);
-      await runWithTransaction(async (q) => {
-        await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
 
+      await runWithTransaction(async (q) => {
+        console.log("Inserting api_request...");
+        await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
+        console.log("Inserted api_request.");
+
+        console.log("Inserting api_request_event...");
         await q(
           `INSERT INTO api_request_event (
             request_id, user_id, api_key_id, session_id, request_time,
@@ -123,13 +132,14 @@ async function logApiRequest(req, res, next) {
             Number(res.getHeader('content-length')) || null,
           ]
         );
+        console.log("Inserted api_request_event.");
       });
     } catch (err) {
       console.warn('[Non-blocking log failure]', err.message);
     }
   });
 
-  next(); // immediately pass to next middleware without waiting
+  next(); // don't block response
 }
 
 module.exports = {
