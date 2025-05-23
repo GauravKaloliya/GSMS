@@ -36,7 +36,7 @@ function getEncryptionKey() {
 async function setEncryptionKey(client) {
   const key = getEncryptionKey();
   // Use parameterized query to avoid SQL injection
-  await client.query(`SET pg.encrypt_key = $1`, [key]);
+  await client.query(`SET pg.encrypt_key = '${key.replace(/'/g, "''")}'`);
 }
 
 // ---- Query Helpers ----
