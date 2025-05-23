@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-x
+
 const hashEmail = (email) => {
   return crypto.createHash('sha256').update(email.toLowerCase()).digest();
 };
