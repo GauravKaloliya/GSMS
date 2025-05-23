@@ -87,12 +87,12 @@ export async function apiRequest<T>(
 
 // Auth API calls
 
-export async function registerUser(email: string, password: string): Promise<{ user_id: number }> {
-  return apiRequest<{ user_id: number }>('/auth/register', 'POST', { email, password });
+export async function registerUser(email: string, password: string): Promise<{ user_id: string }> {
+  return apiRequest<{ user_id: string }>('/register', 'POST', { email, password });
 }
 
-export async function loginUser(email: string, password: string): Promise<{ token: string; user_id: number }> {
-  const data = await apiRequest<{ token: string; user_id: number }>('/auth/login', 'POST', { email, password });
+export async function loginUser(email: string, password: string): Promise<{ token: string; user_id: string }> {
+  const data = await apiRequest<{ token: string; user_id: string }>('/login', 'POST', { email, password });
   await setToken(data.token);
   return data;
 }

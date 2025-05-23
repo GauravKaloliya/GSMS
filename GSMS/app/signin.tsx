@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { loginUser } from '../hooks/apiClient'; // Your API login function
+import { loginUser, registerUser } from '../hooks/apiClient';
+
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -76,32 +77,35 @@ export default function SignInScreen() {
     resetForm();
   };
 
-  // Updated signIn that calls API loginUser and updates session context
-  const signIn = async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      const data = await loginUser(email, password);
-      console.log('Login successful:', data);
-    } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!emailValid || !passwordValid || (mode === 'signUp' && !confirmPasswordValid)) {
       Alert.alert('Error', 'Please fill all fields correctly');
       return;
     }
-
-    if (mode === 'signIn') {
-      await signIn(email, password);
-    } else {
-      Alert.alert('Sign Up', 'Sign up flow not implemented yet.');
+    setLoading(true);
+    try {
+      if (mode === 'signIn') {
+        const data = await loginUser(email, password);
+        console.log(data);
+        Alert.alert('Success', `Welcome back, user #${data.user_id}`);
+        // You can navigate or update app state here after login
+        resetForm();
+      } else {
+        const data = await registerUser(email, password);
+        Alert.alert('Success', `Account created. Your user ID is ${data.user_id}. Please sign in.`);
+        setMode('signIn');
+        resetForm();
+      }
+    } catch (error: any) {
+      Alert.alert(
+        `${mode === 'signIn' ? 'Sign In' : 'Sign Up'} Failed`,
+        error.message || 'An error occurred'
+      );
+    } finally {
+      setLoading(false);
     }
-  };
+  };  
 
   const renderValidationText = (valid: boolean | null, validMsg: string, invalidMsg: string) =>
     valid !== null && (
@@ -261,10 +265,8 @@ export default function SignInScreen() {
             <Text style={styles.bottomText}>
               {mode === 'signIn' ? "Don't have an account?" : 'Already have an account?'}
             </Text>
-            <TouchableOpacity onPress={() => handleToggle(mode === 'signIn' ? 'signUp' : 'signIn')}>
-              <Text style={[styles.bottomText, styles.toggleLink]}>
-                {mode === 'signIn' ? 'Sign Up' : 'Sign In'}
-              </Text>
+            <TouchableOpacity onPress={() => handleToggle(mode === 'signIn' ? 'signUp' : 'signIn')} activeOpacity={0.7}>
+              <Text style={styles.bottomLink}>{mode === 'signIn' ? 'Create Account' : 'Sign In'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -274,36 +276,38 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f5f5f5' },
+  safeArea: { flex: 1, backgroundColor: '#000' },
   topBar: {
-    backgroundColor: '#fff',
-    paddingVertical: 16,
-    borderBottomColor: '#ddd',
-    borderBottomWidth: 1,
+    padding: 20,
+    width: '100%',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  companyName: { fontSize: 22, fontWeight: 'bold', color: '#3399ff' },
+  companyName: {
+    color: '#eee',
+    fontSize: 20,
+    fontWeight: '700',
+  },
   toggleContainer: {
-    marginTop: 24,
-    alignItems: 'center',
+    width: '90%',
+    alignSelf: 'center',
+    marginBottom: 10,
   },
   toggleInner: {
     flexDirection: 'row',
-    backgroundColor: '#ddd',
-    borderRadius: 24,
-    overflow: 'hidden',
-    width: 240,
+    borderRadius: 20,
+    backgroundColor: '#222',
+    position: 'relative',
   },
   toggleButton: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   toggleText: {
+    color: '#aaa',
     fontSize: 16,
-    color: '#555',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   activeToggleText: {
     color: '#fff',
@@ -313,70 +317,89 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    width: 120,
+    width: '53%',
     backgroundColor: '#3399ff',
-    borderRadius: 24,
+    borderRadius: 20,
   },
   container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 32,
+    width: '90%',
+    maxWidth: 320,
+    alignSelf: 'center',
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '700',
-    marginBottom: 32,
-    color: '#222',
+    marginBottom: 20,
+    color: '#eee',
+    textAlign: 'center',
   },
   inputWrapper: {
-    marginBottom: 16,
+    width: '100%',
   },
   marginBottomSmall: {
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  inputWithIconContainer: {
+    position: 'relative',
+    width: '100%',
   },
   input: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: 8,
+    height: 50,
+    backgroundColor: '#222',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingRight: 45,
+    color: '#eee',
     fontSize: 16,
-    color: '#222',
-    borderWidth: 1,
-    borderColor: '#ccc',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  iconInsideInput: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -11 }],
+    height: 22,
+    width: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputValid: {
-    borderColor: 'green',
+    borderColor: '#00c851',
   },
   inputInvalid: {
-    borderColor: 'red',
+    borderColor: '#ff4444',
   },
   validationMessage: {
-    marginTop: 4,
-    fontSize: 12,
+    marginVertical: 10,
+    fontSize: 16,
+    fontWeight: '600',
   },
   validText: {
-    color: 'green',
+    color: '#00c851',
   },
   invalidText: {
-    color: 'red',
+    color: '#ff4444',
   },
   forgotPasswordContainer: {
-    alignItems: 'flex-end',
-    marginBottom: 24,
+    width: '100%',
+    alignItems: 'flex-start',
+    marginBottom: 20,
   },
   forgotPassword: {
     color: '#3399ff',
-    fontSize: 14,
+    fontWeight: '600',
   },
   button: {
     backgroundColor: '#3399ff',
-    paddingVertical: 14,
-    borderRadius: 8,
+    paddingVertical: 15,
+    borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 24,
   },
   buttonDisabled: {
-    backgroundColor: '#9fcfff',
+    backgroundColor: '#555555',
   },
   buttonText: {
     color: '#fff',
@@ -384,24 +407,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   bottomTextContainerColumn: {
-    flexDirection: 'row',
+    width: '90%',
     justifyContent: 'center',
-    gap: 6,
+    alignItems: 'center',
+    marginVertical: 10,
+    flexDirection: 'column',
   },
   bottomText: {
-    fontSize: 14,
-    color: '#555',
+    fontSize: 16,
+    color: '#aaa',
   },
-  toggleLink: {
+  bottomLink: {
+    fontSize: 16,
     color: '#3399ff',
-    fontWeight: '600',
-  },
-  inputWithIconContainer: {
-    position: 'relative',
-  },
-  iconInsideInput: {
-    position: 'absolute',
-    right: 12,
-    top: 14,
+    fontWeight: '700',
   },
 });

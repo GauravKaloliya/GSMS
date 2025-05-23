@@ -1,6 +1,7 @@
-const { runWithTransaction } = require('../../db');
+const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { runWithTransaction } = require('../../db');
 
 const hashEmail = (email) => {
   return crypto.createHash('sha256').update(email.toLowerCase()).digest();
