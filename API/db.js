@@ -45,19 +45,17 @@ async function query(text, params = []) {
 }
 
 async function runWithTransaction(callback) {
-  const client = await pool.connect();
-  
   try {
     await setEncryptionKey(client);
 
-    await client.query('BEGIN');
-    const q = (text, params = []) => client.query(text, params);
+    await query('BEGIN');
+    const q = (text, params = []) => query(text, params);
     const result = await callback(q, client);
-    await client.query('COMMIT');
+    await query('COMMIT');
 
     return result;
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    await query('ROLLBACK').catch(() => {});
     console.error('Error in runWithTransaction:', err);
     throw err;
   } finally {

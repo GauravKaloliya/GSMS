@@ -130,6 +130,36 @@ export async function loginUser(
   return data;
 }
 
+// ---- User Email ----
+export async function getCurrentEmail(): Promise<{ email: string }> {
+  return apiRequest<{ email: string }>('/user/email', 'GET', undefined, true);
+}
+
+export async function updateEmail(email: string): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/user/email', 'POST', { email }, true);
+}
+
+// ---- User Password ----
+export async function updatePassword(password: string): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/user/password', 'POST', { password }, true);
+}
+
+// ---- User Profile ----
+export type UserProfile = {
+  first_name?: string;
+  last_name?: string;
+  profile_image?: string;
+  phone_number?: string;
+};
+
+export async function getProfile(): Promise<UserProfile> {
+  return apiRequest<UserProfile>('/user/profile', 'GET', undefined, true);
+}
+
+export async function updateProfile(profile: UserProfile): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/user/profile', 'POST', profile, true);
+}
+
 export async function logout(): Promise<void> {
   await removeToken();
 }

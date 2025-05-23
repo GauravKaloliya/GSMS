@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,34 +7,79 @@ import {
   SafeAreaView,
   TouchableWithoutFeedback,
   Keyboard,
+  FlatList,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
+// Mock local data
+const MOCK_DATA = [
+  { id: '1', name: 'John Doe' },
+  { id: '2', name: 'Jane Smith' },
+  { id: '3', name: 'Class 101' },
+  { id: '4', name: 'Physics Group' },
+  { id: '5', name: 'Emily Johnson' },
+];
+
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
+  const [filtered, setFiltered] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setFiltered([]);
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const results = MOCK_DATA.filter((item) => item.name.toLowerCase().includes(q));
+    setFiltered(results);
+  }, [query]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
-          {/* Top Search Bar */}
-          <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#aaa" style={styles.icon} />
+          {/* Search Bar */}
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color="#eee" style={styles.icon} />
             <TextInput
               style={styles.input}
-              placeholder="Search here..."
-              placeholderTextColor="#aaa"
+              placeholder="Search for users"
+              placeholderTextColor="#eee"
               value={query}
               onChangeText={setQuery}
               returnKeyType="search"
               autoCapitalize="none"
-              clearButtonMode="while-editing"
             />
+            {query !== '' && (
+              <Ionicons
+                name="close-circle"
+                size={20}
+                color="#eee"
+                style={styles.clearIcon}
+                onPress={() => setQuery('')}
+              />
+            )}
           </View>
 
-          {/* Placeholder for results */}
+          {/* Results */}
           <View style={styles.results}>
-            <Text style={styles.resultText}>Search results will appear here</Text>
+            {query.trim() === '' ? (
+              <Text style={styles.placeholderText}>Start typing to search...</Text>
+            ) : filtered.length === 0 ? (
+              <Text style={styles.placeholderText}>No results found</Text>
+            ) : (
+              <FlatList
+                data={filtered}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <View style={styles.resultItem}>
+                    <Text style={styles.resultText}>{item.name}</Text>
+                  </View>
+                )}
+              />
+            )}
           </View>
         </View>
       </TouchableWithoutFeedback>
@@ -49,35 +94,49 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    padding: 20,
   },
-  searchBarContainer: {
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
   },
   icon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   input: {
     flex: 1,
     fontSize: 16,
     color: '#eee',
   },
+  clearIcon: {
+    marginLeft: 8,
+  },  
   results: {
-    marginTop: 32,
-    alignItems: 'center',
+    flex: 1,
+    marginTop: 20,
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: '#eee',
+    textAlign: 'center',
+    marginTop: 40,
+  },
+  resultItem: {
+    backgroundColor: '#1a1a1a',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 6,
   },
   resultText: {
-    color: '#aaa',
+    color: '#eee',
     fontSize: 16,
   },
 });
