@@ -35,6 +35,7 @@ const registerUser = async (req, res) => {
         `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
       );
+      console.log(existing);
       if (existing.rowCount > 0) {
         throw new Error('Email already registered');
       }
@@ -44,7 +45,7 @@ const registerUser = async (req, res) => {
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
       const newUserId = insertUserRes.rows[0].user_id;
-
+      console.log(`New user_id: ${newUserId}`);
       // Insert encrypted email and hash with validity (valid_from defaults now())
       await client.query(
         `INSERT INTO user_email(user_id, email, email_hash)
@@ -54,7 +55,7 @@ const registerUser = async (req, res) => {
 
       // Hash password (bcrypt) then encrypt
       const hashedPassword = await bcrypt.hash(password, 10);
-
+      console.log(`Hashed password: ${hashedPassword}`);
       await client.query(
         `INSERT INTO user_password(user_id, password_hash)
          VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()))`,
