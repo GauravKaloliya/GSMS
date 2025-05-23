@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { pool, setEncryptionKey } = require('../../db');
+const { runWithTransaction } = require('../../db');
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.header('Authorization');
@@ -8,23 +8,11 @@ const verifyToken = async (req, res, next) => {
   }
 
   try {
-    // Verify JWT and extract user_id (uid) and session_id (sid)
     const { uid, sid } = jwt.verify(authHeader.slice(7).trim(), process.env.JWT_SECRET);
     if (!uid || !sid) throw new Error('Invalid token payload.');
 
-    // Check encryption key environment variable
-    if (!process.env.PG_ENCRYPT_KEY) {
-      console.error('Missing PG_ENCRYPT_KEY');
-      return res.status(500).json({ error: 'Server misconfiguration.' });
-    }
-
-    const client = await pool.connect();
-    try {
-      // Set encryption key for pgcrypto functions (per your schema requirement)
-      await setEncryptionKey(client);
-
-      // Check session validity and user active status according to schema
-      const { rowCount } = await client.query(
+    const found = await runWithTransaction(async (query) => {
+      const { rowCount } = await query(
         `SELECT 1
          FROM user_identity u
          JOIN user_session_user su ON u.user_id = su.user_id
@@ -39,20 +27,18 @@ const verifyToken = async (req, res, next) => {
          LIMIT 1`,
         [uid, sid]
       );
+      return rowCount > 0;
+    });
 
-      if (!rowCount) {
-        return res.status(401).json({ error: 'Invalid or expired session.' });
-      }
-
-      // Attach user info to request object for downstream handlers
-      req.user = { uid, sid };
-      next();
-    } finally {
-      client.release();
+    if (!found) {
+      return res.status(401).json({ error: 'Invalid or expired session.' });
     }
+
+    req.user = { uid, sid };
+    next();
   } catch (err) {
     console.error('Token verification failed:', err.message);
-    res.status(401).json({ error: 'Invalid or expired token.' });
+    return res.status(401).json({ error: 'Invalid or expired token.' });
   }
 };
 
