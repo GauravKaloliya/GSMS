@@ -11,13 +11,11 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { useSession } from '../hooks/ctx';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { loginUser } from '../hooks/apiClient'; // Your API login function
 
 export default function SignInScreen() {
-  const { signIn } = useSession();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,23 +76,30 @@ export default function SignInScreen() {
     resetForm();
   };
 
+  // Updated signIn that calls API loginUser and updates session context
+  const signIn = async (email: string, password: string) => {
+    setLoading(true);
+    try {
+      const data = await loginUser(email, password); // apiClient loginUser
+     
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message || 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!emailValid || !passwordValid || (mode === 'signUp' && !confirmPasswordValid)) {
       Alert.alert('Error', 'Please fill all fields correctly');
       return;
     }
-    setLoading(true);
-    try {
-      if (mode === 'signIn') {
-        await signIn();
-      } else {
-        Alert.alert('Sign Up', 'Sign up flow not implemented yet.');
-      }
-    } catch (error: any) {
-      Alert.alert(`${mode === 'signIn' ? 'Sign In' : 'Sign Up'} Failed`, error.message || 'An error occurred');
-    } finally {
-      setLoading(false);
+
+    if (mode === 'signIn') {
+      await signIn(email, password);
+    } else {
+      Alert.alert('Sign Up', 'Sign up flow not implemented yet.');
     }
   };
 
@@ -256,8 +261,10 @@ export default function SignInScreen() {
             <Text style={styles.bottomText}>
               {mode === 'signIn' ? "Don't have an account?" : 'Already have an account?'}
             </Text>
-            <TouchableOpacity onPress={() => handleToggle(mode === 'signIn' ? 'signUp' : 'signIn')} activeOpacity={0.7}>
-              <Text style={styles.bottomLink}>{mode === 'signIn' ? 'Create Account' : 'Sign In'}</Text>
+            <TouchableOpacity onPress={() => handleToggle(mode === 'signIn' ? 'signUp' : 'signIn')}>
+              <Text style={[styles.bottomText, styles.toggleLink]}>
+                {mode === 'signIn' ? 'Sign Up' : 'Sign In'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -267,38 +274,36 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f5f5f5' },
   topBar: {
-    padding: 20,
-    width: '100%',
-    justifyContent: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 16,
+    borderBottomColor: '#ddd',
+    borderBottomWidth: 1,
     alignItems: 'center',
   },
-  companyName: {
-    color: '#eee',
-    fontSize: 20,
-    fontWeight: '700',
-  },
+  companyName: { fontSize: 22, fontWeight: 'bold', color: '#3399ff' },
   toggleContainer: {
-    width: '90%',
-    alignSelf: 'center',
-    marginBottom: 10,
+    marginTop: 24,
+    alignItems: 'center',
   },
   toggleInner: {
     flexDirection: 'row',
-    borderRadius: 20,
-    backgroundColor: '#222',
-    position: 'relative',
+    backgroundColor: '#ddd',
+    borderRadius: 24,
+    overflow: 'hidden',
+    width: 240,
   },
   toggleButton: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   toggleText: {
-    color: '#aaa',
     fontSize: 16,
-    fontWeight: '600',
+    color: '#555',
+    fontWeight: '500',
   },
   activeToggleText: {
     color: '#fff',
@@ -308,89 +313,70 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    width: '53%',
+    width: 120,
     backgroundColor: '#3399ff',
-    borderRadius: 20,
+    borderRadius: 24,
   },
   container: {
-    width: '90%',
-    maxWidth: 320,
-    alignSelf: 'center',
-    flexGrow: 1,
-    justifyContent: 'center',
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 32,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
-    marginBottom: 20,
-    color: '#eee',
-    textAlign: 'center',
+    marginBottom: 32,
+    color: '#222',
   },
   inputWrapper: {
-    width: '100%',
+    marginBottom: 16,
   },
   marginBottomSmall: {
-    marginBottom: 10,
-  },
-  inputWithIconContainer: {
-    position: 'relative',
-    width: '100%',
+    marginBottom: 8,
   },
   input: {
-    height: 50,
-    backgroundColor: '#222',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingRight: 45,
-    color: '#eee',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 8,
     fontSize: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  iconInsideInput: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -11 }],
-    height: 22,
-    width: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    color: '#222',
+    borderWidth: 1,
+    borderColor: '#ccc',
   },
   inputValid: {
-    borderColor: '#00c851',
+    borderColor: 'green',
   },
   inputInvalid: {
-    borderColor: '#ff4444',
+    borderColor: 'red',
   },
   validationMessage: {
-    marginVertical: 10,
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: 4,
+    fontSize: 12,
   },
   validText: {
-    color: '#00c851',
+    color: 'green',
   },
   invalidText: {
-    color: '#ff4444',
+    color: 'red',
   },
   forgotPasswordContainer: {
-    width: '100%',
-    alignItems: 'flex-start',
-    marginBottom: 20,
+    alignItems: 'flex-end',
+    marginBottom: 24,
   },
   forgotPassword: {
     color: '#3399ff',
-    fontWeight: '600',
+    fontSize: 14,
   },
   button: {
     backgroundColor: '#3399ff',
-    paddingVertical: 15,
-    borderRadius: 10,
+    paddingVertical: 14,
+    borderRadius: 8,
     alignItems: 'center',
+    marginBottom: 24,
   },
   buttonDisabled: {
-    backgroundColor: '#555555',
+    backgroundColor: '#9fcfff',
   },
   buttonText: {
     color: '#fff',
@@ -398,19 +384,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   bottomTextContainerColumn: {
-    width: '90%',
+    flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 10,
-    flexDirection: 'column',
+    gap: 6,
   },
   bottomText: {
-    fontSize: 16,
-    color: '#aaa',
+    fontSize: 14,
+    color: '#555',
   },
-  bottomLink: {
-    fontSize: 16,
+  toggleLink: {
     color: '#3399ff',
-    fontWeight: '700',
+    fontWeight: '600',
+  },
+  inputWithIconContainer: {
+    position: 'relative',
+  },
+  iconInsideInput: {
+    position: 'absolute',
+    right: 12,
+    top: 14,
   },
 });

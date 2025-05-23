@@ -1,35 +1,16 @@
-import { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   SafeAreaView,
   Image
 } from 'react-native';
-import { useSession } from '../../hooks/ctx';
+
 import { router } from 'expo-router';
 
 export default function HomeScreen() {
-  const { isLoading, session } = useSession();
-
-  useEffect(() => {
-    if (!isLoading && !session) {
-      router.replace('/signin');
-    }
-  }, [isLoading, session]);
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3399ff" />
-      </View>
-    );
-  }
-
-  if (!session) return null;
-
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Top Bar */}
