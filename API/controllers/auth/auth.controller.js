@@ -1,4 +1,4 @@
-const { runWithTransaction } = require('../../db');
+const { getEncryptionKey, runWithTransaction } = require('../../db');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
@@ -32,16 +32,16 @@ const registerUser = async (req, res) => {
       console.log('New user ID:', newUserId);
       await query(
         `INSERT INTO user_email(user_id, email, email_hash)
-         VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()), $3)`,
-        [newUserId, emailBuffer, emailHash]
+         VALUES ($1, pgp_sym_encrypt($2, $3), $4)`,
+        [newUserId, emailBuffer, await getEncryptionKey(), emailHash]
       );
 
       const hashedPassword = await bcrypt.hash(password, 10);
       console.log('Hashed password:', hashedPassword);
       await query(
         `INSERT INTO user_password(user_id, password_hash)
-         VALUES ($1, pgp_sym_encrypt($2, get_encrypt_key()))`,
-        [newUserId, hashedPassword]
+         VALUES ($1, pgp_sym_encrypt($2, $3))`,
+        [newUserId, hashedPassword, await getEncryptionKey()]
       );
 
       return newUserId;

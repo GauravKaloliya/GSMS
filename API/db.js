@@ -23,9 +23,14 @@ AWS.config.update({
 
 const s3 = new AWS.S3();
 
-async function setEncryptionKey(client) {
+async function getEncryptionKey() {
   const key = process.env.PG_ENCRYPT_KEY;
   if (!key) throw new Error('PG_ENCRYPT_KEY environment variable is required');
+  return key;
+}
+
+async function setEncryptionKey(client) {
+  const key = await getEncryptionKey();
   await client.query('SET pg.encrypt_key = $1', [key]);
 }
 
@@ -58,6 +63,7 @@ async function runWithTransaction(callback) {
 
 module.exports = {
   pool,
+  getEncryptionKey,
   query,
   runWithTransaction,
   s3,
