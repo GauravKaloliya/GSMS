@@ -8,15 +8,21 @@ const hashEmail = (email) => {
 };
 
 // Helper: run DB client with encryption key set
-const runWithClient = async (handler) => {
+const runWithClient = async (callback) => {
   const client = await pool.connect();
   try {
-    await setEncryptionKey(client);
-    return await handler(client);
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e; // Important: make sure you’re not swallowing the error here
   } finally {
     client.release();
   }
 };
+
 
 const registerUser = async (req, res) => {
   const { email, password } = req.body;
