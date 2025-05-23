@@ -6,11 +6,10 @@ const AWS = require('aws-sdk');
 const pool = new Pool({
   connectionString: process.env.POSTGRES_PRISMA_URL,
   max: 20,
-  idleTimeoutMillis: 60000,      // increased from 30000
-  connectionTimeoutMillis: 60000, // increased from 2000
+  idleTimeoutMillis: 30000,      
+  connectionTimeoutMillis: 2000, 
   ssl: { rejectUnauthorized: false },
 });
-
 
 pool.on('error', (err) => {
   console.error('Unexpected PG client error', err);
