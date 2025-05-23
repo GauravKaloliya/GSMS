@@ -73,6 +73,8 @@ const loginUser = async (req, res) => {
         [emailHash]
       );
 
+      console.log(userRes);
+
       if (userRes.rowCount === 0) {
         throw new Error('User not found');
       }
@@ -80,8 +82,8 @@ const loginUser = async (req, res) => {
       const userId = userRes.rows[0].user_id;
 
       const passRes = await query(
-        `SELECT pgp_sym_decrypt(password_hash::bytea, current_setting('pg.encrypt_key')) AS password_hash
-         FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
+        `SELECT pgp_sym_decrypt(password_hash, current_setting('pg.encrypt_key')) AS password_hash
+         FROM user_password WHERE user_id = $1::uuid AND valid_to IS NULL`,
         [userId]
       );      
 
