@@ -45,12 +45,13 @@ async function query(text, params = []) {
 }
 
 async function runWithTransaction(callback) {
+  console.log('runWithTransaction called');
   const client = await pool.connect();
   try {
     await setEncryptionKey(client);
 
-    // Log the pg.encrypt_key for this client session:
     const keyRes = await client.query(`SELECT current_setting('pg.encrypt_key') AS key`);
+    console.log('Query result:', keyRes);
     console.log('PG encryption key in runWithTransaction:', keyRes.rows[0].key);
 
     await client.query('BEGIN');
@@ -60,6 +61,7 @@ async function runWithTransaction(callback) {
     return result;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    console.error('Error in runWithTransaction:', err);
     throw err;
   } finally {
     client.release();
