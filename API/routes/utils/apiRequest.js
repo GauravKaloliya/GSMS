@@ -23,7 +23,7 @@ function compressIfLarge(buf) {
   }
 }
 
-// Capture raw body without blocking next()
+
 function captureRawBody(req) {
   return new Promise((resolve) => {
     const chunks = [];
@@ -32,7 +32,7 @@ function captureRawBody(req) {
     req.on('data', (chunk) => {
       length += chunk.length;
       if (length > MAX_BODY_SIZE) {
-        req.destroy(); // cancel request if too large
+        req.destroy();
         return resolve(Buffer.alloc(0));
       }
       chunks.push(chunk);
@@ -80,7 +80,6 @@ async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
-  // Start capturing raw body immediately, non-blocking
   captureRawBody(req).then((rawBody) => {
     res.locals.rawBody = rawBody;
   });
@@ -97,11 +96,8 @@ async function logApiRequest(req, res, next) {
       console.log(`[${endTime - startTime}ms] ${req.method} ${req.originalUrl} ${res.statusCode}`);
 
       await runWithTransaction(async (q) => {
-        console.log("Inserting api_request...");
         await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
-        console.log("Inserted api_request.");
-
-        console.log("Inserting api_request_event...");
+        
         await q(
           `INSERT INTO api_request_event (
             request_id, user_id, api_key_id, session_id, request_time,
@@ -132,14 +128,13 @@ async function logApiRequest(req, res, next) {
             Number(res.getHeader('content-length')) || null,
           ]
         );
-        console.log("Inserted api_request_event.");
       });
     } catch (err) {
-      console.warn('[Non-blocking log failure]', err.message);
+      console.error('[Non-blocking log failure]', err.message);
     }
   });
 
-  next(); // don't block response
+  next();
 }
 
 module.exports = {
