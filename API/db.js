@@ -31,7 +31,7 @@ async function getEncryptionKey() {
 
 async function setEncryptionKey(client) {
   const key = await getEncryptionKey();
-  await client.query('SET pg.encrypt_key = $1', [key]);
+  await client.query(`SET pg.encrypt_key = '${key.replace(/'/g, "''")}'`);
 }
 
 async function query(text, params = []) {
