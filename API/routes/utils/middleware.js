@@ -2,16 +2,19 @@ const jwt = require('jsonwebtoken');
 const { runWithTransaction } = require('../../db');
 
 const verifyToken = async (req, res, next) => {
+  // Extract Authorization header and check Bearer format
   const authHeader = req.header('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authorization token missing or malformed.' });
   }
 
   try {
+    // Verify JWT using secret key, extract user ID (uid) and session ID (sid)
     const { uid, sid } = jwt.verify(authHeader.slice(7).trim(), process.env.JWT_SECRET);
     if (!uid || !sid) throw new Error('Invalid token payload.');
 
-    const found = await runWithTransaction(async (query) => {
+    // Validate session in database within transaction
+    const sessionValid = await runWithTransaction(async (query) => {
       const { rowCount } = await query(
         `SELECT 1
          FROM user_identity u
@@ -30,10 +33,11 @@ const verifyToken = async (req, res, next) => {
       return rowCount > 0;
     });
 
-    if (!found) {
+    if (!sessionValid) {
       return res.status(401).json({ error: 'Invalid or expired session.' });
     }
 
+    // Attach user info to request and call next middleware
     req.user = { uid, sid };
     next();
   } catch (err) {

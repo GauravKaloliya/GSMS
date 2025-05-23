@@ -1,4 +1,4 @@
-const { getEncryptionKey, runWithTransaction } = require('../../db');
+const { runWithTransaction } = require('../../db');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
@@ -30,18 +30,20 @@ const registerUser = async (req, res) => {
       );
       const newUserId = insertUserRes.rows[0].user_id;
       console.log('New user ID:', newUserId);
+
       await query(
         `INSERT INTO user_email(user_id, email, email_hash)
-         VALUES ($1, pgp_sym_encrypt($2, $3), $4)`,
-        [newUserId, emailBuffer, await getEncryptionKey(), emailHash]
+         VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
+        [newUserId, emailBuffer, emailHash]
       );
 
       const hashedPassword = await bcrypt.hash(password, 10);
       console.log('Hashed password:', hashedPassword);
+
       await query(
         `INSERT INTO user_password(user_id, password_hash)
-         VALUES ($1, pgp_sym_encrypt($2, $3))`,
-        [newUserId, hashedPassword, await getEncryptionKey()]
+         VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')))`,
+        [newUserId, hashedPassword]
       );
 
       return newUserId;
@@ -79,7 +81,7 @@ const loginUser = async (req, res) => {
       const userId = userRes.rows[0].user_id;
 
       const passRes = await query(
-        `SELECT pgp_sym_decrypt(password_hash, get_encrypt_key()) AS password_hash
+        `SELECT pgp_sym_decrypt(password_hash, current_setting('pg.encrypt_key')) AS password_hash
          FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
         [userId]
       );
