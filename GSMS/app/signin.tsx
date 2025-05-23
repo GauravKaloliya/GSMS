@@ -80,8 +80,8 @@ export default function SignInScreen() {
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const data = await loginUser(email, password); // apiClient loginUser
-     
+      const data = await loginUser(email, password);
+      console.log('Login successful:', data);
     } catch (error: any) {
       Alert.alert('Login Failed', error.message || 'Unknown error');
     } finally {
