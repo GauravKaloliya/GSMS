@@ -11,9 +11,6 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-app.use(logApiRequest);           
-app.use(captureResponseBody);
-
 app.get('/', (req, res) => res.send('API Server Running'));
 
 app.use('/api', authRoutes);
