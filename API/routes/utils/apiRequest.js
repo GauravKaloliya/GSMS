@@ -3,8 +3,8 @@ const onFinished = require('on-finished');
 const zlib = require('zlib');
 const { runWithTransaction } = require('../../db');
 
-const MAX_BODY_SIZE = 1e6;       // 1MB max for request body capture
-const MAX_RES_BODY_SIZE = 1e6;   // 1MB max for response body capture
+const MAX_BODY_SIZE = 1e6; // 1MB max for request body capture
+const MAX_RES_BODY_SIZE = 1e6; // 1MB max for response body capture
 
 function safeStringify(obj) {
   try {
@@ -16,29 +16,35 @@ function safeStringify(obj) {
 
 function compressIfLarge(buffer) {
   try {
-    if (!buffer || buffer.length < 1024) return buffer; // Only compress if >1KB
+    if (!buffer || buffer.length < 1024) return buffer;
     return zlib.gzipSync(buffer);
   } catch {
     return buffer;
   }
 }
 
-async function captureRawBody(req) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let length = 0;
+// New middleware: capture raw body BEFORE JSON parsing
+function captureRawBodyMiddleware(req, res, next) {
+  const chunks = [];
+  let length = 0;
 
-    req.on('data', (chunk) => {
-      length += chunk.length;
-      if (length > MAX_BODY_SIZE) {
-        req.destroy();
-        return resolve(Buffer.alloc(0)); // Return empty buffer if too large
-      }
-      chunks.push(chunk);
-    });
+  req.on('data', (chunk) => {
+    length += chunk.length;
+    if (length > MAX_BODY_SIZE) {
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
 
-    req.once('end', () => resolve(Buffer.concat(chunks)));
-    req.once('error', () => resolve(Buffer.alloc(0)));
+  req.on('end', () => {
+    req.rawBody = Buffer.concat(chunks);
+    next();
+  });
+
+  req.on('error', () => {
+    req.rawBody = Buffer.alloc(0);
+    next();
   });
 }
 
@@ -79,19 +85,12 @@ async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
-  // Capture raw request body asynchronously before response finishes
-  const rawBodyPromise = captureRawBody(req).then(rawBody => {
-    res.locals.rawBody = rawBody;
-  });
-
-  // After response finished, log request and response info in DB
+  // Wait for response finish event
   onFinished(res, async () => {
     try {
-      await rawBodyPromise;
-
       const endTime = Date.now();
 
-      const rawReqBody = res.locals.rawBody || Buffer.alloc(0);
+      const rawReqBody = req.rawBody || Buffer.alloc(0);
       const compressedReqBody = compressIfLarge(rawReqBody);
 
       const resBody = res.locals.responseBody || Buffer.alloc(0);
@@ -134,7 +133,6 @@ async function logApiRequest(req, res, next) {
         );
       });
     } catch (error) {
-      // Non-blocking: log the error but don't affect response
       console.error('[Non-blocking log failure]', error.message);
     }
   });
@@ -143,6 +141,7 @@ async function logApiRequest(req, res, next) {
 }
 
 module.exports = {
+  captureRawBodyMiddleware,
   captureResponseBody,
   logApiRequest,
 };
