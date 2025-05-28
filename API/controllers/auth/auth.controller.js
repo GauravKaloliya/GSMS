@@ -125,4 +125,39 @@ const loginUser = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser };
+const logoutUser = async (req, res) => {
+  const authHeader = req.get('Authorization');
+  const token = authHeader?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Missing token' });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const sessionId = payload.sid;
+
+    await runWithTransaction(async (query) => {
+      await query(
+        `UPDATE user_session_user
+         SET valid_to = now()
+         WHERE session_id = $1 AND valid_to IS NULL`,
+        [sessionId]
+      );
+
+      await logAuditEvent(query, 'USER_LOGOUT', {
+        user_id: payload.uid,
+        session_id: sessionId,
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent'),
+      });
+    });
+
+    return res.status(200).json({ message: 'Logged out successfully' });
+  } catch (e) {
+    console.error('Logout error:', e.message);
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+};
+
+module.exports = { registerUser, loginUser, logoutUser };

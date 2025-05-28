@@ -159,7 +159,7 @@ export async function logout(): Promise<void> {
   try {
     await apiRequest('/logout', 'POST', {}, true);
   } catch (e: any) {
-      console.warn('Server-side logout failed:', e);
+    console.warn('Server-side logout failed:', e);
   } finally {
     await removeToken();
   }
