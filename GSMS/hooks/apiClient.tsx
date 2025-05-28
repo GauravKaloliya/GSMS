@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { jwtDecode } from 'jwt-decode';
 
 export type ApiResponse<T> = {
   error?: string;
@@ -51,6 +52,27 @@ export async function removeToken(): Promise<void> {
     }
   } catch (error) {
     console.error('Failed to remove token:', error);
+  }
+}
+
+// --- Session helpers ---
+
+type TokenPayload = {
+  uid: string; // user_id
+  sid: string; // session_id
+  exp: number;
+  iat: number;
+};
+
+export async function getSessionInfo(): Promise<TokenPayload | null> {
+  const token = await getToken();
+  if (!token) return null;
+
+  try {
+    return jwtDecode<TokenPayload>(token);
+  } catch (err) {
+    console.error('Failed to decode JWT:', err);
+    return null;
   }
 }
 
@@ -124,13 +146,21 @@ export async function registerUser(
 export async function loginUser(
   credentials: { username?: string; email?: string; password: string }
 ): Promise<{ token: string; user_id: string }> {
-  const data = await apiRequest<{ token: string; user_id: string }>('/login', 'POST', credentials);
+  const data = await apiRequest<{ token: string; user_id: string; session_id?: string }>(
+    '/login',
+    'POST',
+    credentials
+  );
   await setToken(data.token);
   return data;
 }
 
-// --- Logout ---
-
 export async function logout(): Promise<void> {
-  await removeToken();
+  try {
+    await apiRequest('/logout', 'POST', {}, true);
+  } catch (e: any) {
+      console.warn('Server-side logout failed:', e);
+  } finally {
+    await removeToken();
+  }
 }
