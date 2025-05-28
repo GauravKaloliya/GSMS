@@ -64,17 +64,17 @@ const registerUser = async (req, res) => {
       // 5. Insert email (encrypted using crypt_user_data)
       await query(
         `INSERT INTO user_email (user_id, email, email_hash)
-         VALUES ($1, crypt_user_data('encrypt', 'email', $2), $3)`,
-        [userId, email, emailHash]
-      );
+         VALUES ($1, crypt_user_data('encrypt', 'email', $2::bytea), $3)`,
+        [userId, Buffer.from(email), emailHash]
+      );      
 
       // 6. Insert password (hashed + encrypted)
       const hashedPw = await bcrypt.hash(password, 10);
       await query(
         `INSERT INTO user_password (user_id, password_hash)
-         VALUES ($1, crypt_user_data('encrypt', 'password', $2))`,
-        [userId, hashedPw]
-      );
+         VALUES ($1, crypt_user_data('encrypt', 'password', $2::bytea))`,
+        [userId, Buffer.from(hashedPw)]
+      );      
 
       // 7. Audit log success
       await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
