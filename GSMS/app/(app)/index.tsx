@@ -8,14 +8,14 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
-import { getToken, removeToken } from '../../hooks/apiClient';
+import { getToken,logoutUser } from '../../hooks/apiClient';
 
 export default function HomeScreen() {
   useEffect(() => {
     const checkAuth = async () => {
       const token = await getToken();
       if (!token) {
-        router.replace('/signin'); // Redirect to sign-in if no token
+        router.replace('/signin');
       }
     };
 
@@ -24,7 +24,7 @@ export default function HomeScreen() {
 
   const handleSignOut = async () => {
     try {
-      await removeToken();
+      await logoutUser();
       router.replace('/signin');
     } catch (error) {
       console.error('Sign out error:', error);

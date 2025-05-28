@@ -11,7 +11,8 @@ import {
   Animated,
   Easing,
   ScrollView, 
-  RefreshControl
+  RefreshControl,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -108,6 +109,8 @@ export default function SignInScreen() {
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
+
+    setLoading(true);
 
     if (mode === 'signIn') {
       const trimmedIdentifier = userIdentifier.trim();
@@ -345,13 +348,13 @@ export default function SignInScreen() {
                 disabled={isSubmitDisabled}
                 activeOpacity={0.8}
               >
-                <Text style={styles.buttonText}>
-                  {loading
-                    ? `${mode === 'signIn' ? 'Signing In' : 'Signing Up'}...`
-                    : mode === 'signIn'
-                    ? 'Sign In'
-                    : 'Sign Up'}
-                </Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>
+                    {mode === 'signIn' ? 'Sign In' : 'Sign Up'}
+                  </Text>
+                )}
               </TouchableOpacity>
 
               <View style={styles.bottomTextContainerColumn}>
