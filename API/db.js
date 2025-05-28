@@ -11,6 +11,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+pool.on('connect', async (client) => {
+  await client.query(`SET pg.encrypt_key = '${getEncryptionKey().replace(/'/g, "''")}'`);
+});
+
 pool.on('error', (err) => {
   console.error('Unexpected PG client error', err);
   process.exit(1);
@@ -32,17 +36,10 @@ function getEncryptionKey() {
   return key;
 }
 
-async function setEncryptionKey(client) {
-  const key = getEncryptionKey();
-  // Use parameterized query to avoid SQL injection
-  await client.query(`SET pg.encrypt_key = '${key.replace(/'/g, "''")}'`);
-}
-
 // ---- Query Helpers ----
 async function query(text, params = []) {
   const client = await pool.connect();
   try {
-    await setEncryptionKey(client);
     const result = await client.query(text, params);
     return result;
   } finally {
@@ -53,7 +50,6 @@ async function query(text, params = []) {
 async function runWithTransaction(callback) {
   const client = await pool.connect();
   try {
-    await setEncryptionKey(client);
     await client.query('BEGIN');
 
     // Pass raw client with encryption already set
@@ -75,9 +71,6 @@ async function runWithTransaction(callback) {
 }
 
 module.exports = {
-  pool,
-  s3,
   query,
-  runWithTransaction,
-  getEncryptionKey,
+  runWithTransaction
 };
