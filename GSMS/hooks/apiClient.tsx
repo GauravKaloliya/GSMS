@@ -173,7 +173,7 @@ export async function savePushToken(
   platform: string = Platform.OS
 ): Promise<{ message: string }> {
   return apiRequest<{ message: string }>(
-    'user/push-token',
+    '/user/push-token',
     'POST',
     { push_token: pushToken, platform },
     true
