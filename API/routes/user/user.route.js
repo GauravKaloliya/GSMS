@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const userController = require('../../controllers/user/user.controller');
+const { savePushToken, addOrUpdateEmail, getCurrentEmail, setOrUpdatePassword, getProfile, updateProfile } = require('../../controllers/user/user.controller');
 
 router
-  .post('/email', userController.addOrUpdateEmail)
-  .get('/email', userController.getCurrentEmail)
-  .post('/password', userController.setOrUpdatePassword)
-  .get('/profile', userController.getProfile)
-  .put('/profile', userController.updateProfile);
+  .post('/push-token', savePushToken)
+  .post('/email', addOrUpdateEmail)
+  .get('/email', getCurrentEmail)
+  .post('/password', setOrUpdatePassword)
+  .get('/profile', getProfile)
+  .put('/profile', updateProfile);
 
 module.exports = router;
