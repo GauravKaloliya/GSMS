@@ -64,7 +64,7 @@ const registerUser = async (req, res) => {
       );
 
       const hashedPw = await bcrypt.hash(password, 10);
-      
+
       await query(
         `INSERT INTO user_password (user_id, password_hash)
          VALUES ($1, crypt_user_data('encrypt', 'password', convert_to($2, 'UTF8')))`,
@@ -131,7 +131,6 @@ const loginUser = async (req, res) => {
 
       const userId = userRes.rows[0].user_id;
 
-      // Get stored hashed password (decrypt via crypt_user_data)
       const pwRes = await query(
         `SELECT crypt_user_data('decrypt', 'password', password_hash) AS pw
          FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
@@ -141,16 +140,17 @@ const loginUser = async (req, res) => {
         throw new Error('Password not set');
       }
 
-      const isMatch = await bcrypt.compare(password, pwRes.rows[0].pw);
+      // Decrypted password hash is BYTEA; convert to UTF-8 string
+      const storedHash = pwRes.rows[0].pw.toString('utf8');
 
-      // Resolve username for audit/logging
+      const isMatch = await bcrypt.compare(password, storedHash);
+
       const usernameRes = await query(
         `SELECT username FROM user_username WHERE user_id = $1 AND valid_to IS NULL`,
         [userId]
       );
       const resolvedUsername = usernameRes.rows[0]?.username || null;
 
-      // Log the login attempt
       await query(
         `INSERT INTO user_login_attempt (user_id, success, ip_address, user_agent)
          VALUES ($1, $2, $3, $4)`,
@@ -169,13 +169,19 @@ const loginUser = async (req, res) => {
         throw new Error('Invalid credentials');
       }
 
-      // Create a new session identity
+      // Invalidate all other active sessions for single session enforcement
+      await query(
+        `UPDATE user_session_user
+         SET valid_to = now()
+         WHERE user_id = $1 AND valid_to IS NULL`,
+        [userId]
+      );
+
       const sessionRes = await query(
         `INSERT INTO user_session_identity DEFAULT VALUES RETURNING session_id`
       );
       const sessionId = sessionRes.rows[0].session_id;
 
-      // Link session to user including IP and user agent
       await query(
         `INSERT INTO user_session_user (session_id, user_id, ip_address, user_agent)
          VALUES ($1, $2, $3, $4)`,
@@ -198,8 +204,8 @@ const loginUser = async (req, res) => {
       logAuditEvent(q, 'USER_LOGIN_ERROR', {
         username,
         email: email?.toLowerCase(),
-        ip_address: req.ip,
-        user_agent: req.get('User-Agent'),
+        ip_address: ipAddress,
+        user_agent: userAgent,
         error: e.message,
       })
     ).catch(() => {});
@@ -209,6 +215,7 @@ const loginUser = async (req, res) => {
   }
 };
 
+// Logout User
 const logoutUser = async (req, res) => {
   const authHeader = req.get('Authorization');
   const token = authHeader?.split(' ')[1];
@@ -244,7 +251,6 @@ const logoutUser = async (req, res) => {
   }
 };
 
-// Invalidate Other Sessions
 const invalidateOtherSessions = async (req, res) => {
   const { userId } = req.body;
   const currentIp = req.ip;
