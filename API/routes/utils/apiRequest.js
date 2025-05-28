@@ -3,8 +3,8 @@ const onFinished = require('on-finished');
 const zlib = require('zlib');
 const { runWithTransaction } = require('../../db');
 
-const MAX_BODY_SIZE = 1e6; // 1MB
-const MAX_RES_BODY_SIZE = 1e6; // 1MB
+const MAX_BODY_SIZE = 1e6;       // 1MB max for request body capture
+const MAX_RES_BODY_SIZE = 1e6;   // 1MB max for response body capture
 
 function safeStringify(obj) {
   try {
@@ -14,17 +14,16 @@ function safeStringify(obj) {
   }
 }
 
-function compressIfLarge(buf) {
+function compressIfLarge(buffer) {
   try {
-    if (!buf || buf.length < 1024) return buf;
-    return zlib.gzipSync(buf);
+    if (!buffer || buffer.length < 1024) return buffer; // Only compress if >1KB
+    return zlib.gzipSync(buffer);
   } catch {
-    return buf;
+    return buffer;
   }
 }
 
-
-function captureRawBody(req) {
+async function captureRawBody(req) {
   return new Promise((resolve) => {
     const chunks = [];
     let length = 0;
@@ -33,7 +32,7 @@ function captureRawBody(req) {
       length += chunk.length;
       if (length > MAX_BODY_SIZE) {
         req.destroy();
-        return resolve(Buffer.alloc(0));
+        return resolve(Buffer.alloc(0)); // Return empty buffer if too large
       }
       chunks.push(chunk);
     });
@@ -47,30 +46,30 @@ function captureResponseBody(req, res, next) {
   const chunks = [];
   let totalLength = 0;
 
-  const origWrite = res.write;
-  const origEnd = res.end;
+  const originalWrite = res.write;
+  const originalEnd = res.end;
 
-  res.write = function (chunk, encoding, cb) {
+  res.write = function (chunk, encoding, callback) {
     if (chunk) {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
-      if (totalLength + buf.length <= MAX_RES_BODY_SIZE) {
-        chunks.push(buf);
-        totalLength += buf.length;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
+      if (totalLength + buffer.length <= MAX_RES_BODY_SIZE) {
+        chunks.push(buffer);
+        totalLength += buffer.length;
       }
     }
-    return origWrite.call(this, chunk, encoding, cb);
+    return originalWrite.call(this, chunk, encoding, callback);
   };
 
-  res.end = function (chunk, encoding, cb) {
+  res.end = function (chunk, encoding, callback) {
     if (chunk) {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
-      if (totalLength + buf.length <= MAX_RES_BODY_SIZE) {
-        chunks.push(buf);
-        totalLength += buf.length;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
+      if (totalLength + buffer.length <= MAX_RES_BODY_SIZE) {
+        chunks.push(buffer);
+        totalLength += buffer.length;
       }
     }
     res.locals.responseBody = Buffer.concat(chunks);
-    return origEnd.call(this, chunk, encoding, cb);
+    return originalEnd.call(this, chunk, encoding, callback);
   };
 
   next();
@@ -80,25 +79,30 @@ async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
-  captureRawBody(req).then((rawBody) => {
+  // Capture raw request body asynchronously before response finishes
+  const rawBodyPromise = captureRawBody(req).then(rawBody => {
     res.locals.rawBody = rawBody;
   });
 
+  // After response finished, log request and response info in DB
   onFinished(res, async () => {
     try {
+      await rawBodyPromise;
+
       const endTime = Date.now();
 
-      const rawBody = res.locals.rawBody || Buffer.alloc(0);
-      const compressedReq = compressIfLarge(rawBody);
+      const rawReqBody = res.locals.rawBody || Buffer.alloc(0);
+      const compressedReqBody = compressIfLarge(rawReqBody);
+
       const resBody = res.locals.responseBody || Buffer.alloc(0);
-      const compressedRes = compressIfLarge(resBody);
+      const compressedResBody = compressIfLarge(resBody);
 
       console.log(`[${endTime - startTime}ms] ${req.method} ${req.originalUrl} ${res.statusCode}`);
 
-      await runWithTransaction(async (q) => {
-        await q(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
-        
-        await q(
+      await runWithTransaction(async (query) => {
+        await query(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
+
+        await query(
           `INSERT INTO api_request_event (
             request_id, user_id, api_key_id, session_id, request_time,
             http_method, endpoint, query_params, request_headers, request_body,
@@ -118,19 +122,20 @@ async function logApiRequest(req, res, next) {
             req.originalUrl,
             safeStringify(req.query),
             safeStringify(req.headers),
-            compressedReq,
+            compressedReqBody,
             req.ip,
             req.headers['user-agent'] || null,
             endTime,
             res.statusCode,
             safeStringify(res.getHeaders()),
-            compressedRes,
+            compressedResBody,
             Number(res.getHeader('content-length')) || null,
           ]
         );
       });
-    } catch (err) {
-      console.error('[Non-blocking log failure]', err.message);
+    } catch (error) {
+      // Non-blocking: log the error but don't affect response
+      console.error('[Non-blocking log failure]', error.message);
     }
   });
 

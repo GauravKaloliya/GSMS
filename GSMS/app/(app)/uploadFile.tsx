@@ -164,10 +164,6 @@ export default function UploadFile() {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.title}>Upload Your File</Text>
-          <Text style={styles.subtitle}>
-            Select any file from your device. Images, videos, audio, or text files are supported.
-          </Text>
-
           <TouchableOpacity style={styles.uploadZone} onPress={pickDocument} activeOpacity={0.7}>
             <Ionicons name="cloud-upload-outline" size={70} color="#3399ff" />
             <Text style={styles.uploadText}>Tap to Upload or Browse Files</Text>

@@ -18,6 +18,7 @@ const registerUser = async (req, res) => {
 
   try {
     const userId = await runWithTransaction(async (query) => {
+      // Check if email already registered and not soft-deleted
       const existing = await query(
         `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
@@ -26,21 +27,23 @@ const registerUser = async (req, res) => {
         throw new Error('Email already registered');
       }
 
+      // Create new user_identity entry
       const insertUserRes = await query(
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
       const newUserId = insertUserRes.rows[0].user_id;
-      
+
+      // Insert encrypted email
       await query(
-        `INSERT INTO user_email(user_id, email, email_hash)
+        `INSERT INTO user_email (user_id, email, email_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
         [newUserId, emailBuffer, emailHash]
       );
 
+      // Hash password and store encrypted hash
       const hashedPassword = await bcrypt.hash(password, 10);
-      
       await query(
-        `INSERT INTO user_password(user_id, password_hash)
+        `INSERT INTO user_password (user_id, password_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')))`,
         [newUserId, hashedPassword]
       );
@@ -48,10 +51,10 @@ const registerUser = async (req, res) => {
       return newUserId;
     });
 
-    res.status(201).json({ user_id: userId });
+    return res.status(201).json({ user_id: userId });
   } catch (e) {
     console.error('Registration error:', e.message);
-    res.status(400).json({ error: e.message || 'User creation failed' });
+    return res.status(400).json({ error: e.message || 'User creation failed' });
   }
 };
 
@@ -68,6 +71,7 @@ const loginUser = async (req, res) => {
 
   try {
     const userId = await runWithTransaction(async (query) => {
+      // Find user by email hash (not soft-deleted)
       const userRes = await query(
         `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
@@ -79,6 +83,7 @@ const loginUser = async (req, res) => {
 
       const userId = userRes.rows[0].user_id;
 
+      // Get encrypted password hash
       const passRes = await query(
         `SELECT pgp_sym_decrypt(password_hash, current_setting('pg.encrypt_key')) AS password_hash
          FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
@@ -90,31 +95,33 @@ const loginUser = async (req, res) => {
       }
 
       const storedHash = passRes.rows[0].password_hash;
-      const match = await bcrypt.compare(password, storedHash);
+      const isMatch = await bcrypt.compare(password, storedHash);
 
+      // Log login attempt regardless of success or failure
       await query(
-        `INSERT INTO user_login_attempt(user_id, success, ip_address, user_agent)
+        `INSERT INTO user_login_attempt (user_id, success, ip_address, user_agent)
          VALUES ($1, $2, $3, $4)`,
-        [userId, match, ipAddress, userAgent]
+        [userId, isMatch, ipAddress, userAgent]
       );
 
-      if (!match) {
+      if (!isMatch) {
         throw new Error('Invalid credentials');
       }
 
       return userId;
     });
 
+    // Generate JWT token with consistent user_id field (not uid)
     const token = jwt.sign(
-      { user_id: userId },
+      { uid: userId }, // use uid for consistency with your auth middleware
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
 
-    res.status(200).json({ user_id: userId, token });
+    return res.status(200).json({ user_id: userId, token });
   } catch (e) {
     console.error('Login error:', e.message);
-    res.status(401).json({ error: e.message || 'Login failed' });
+    return res.status(401).json({ error: e.message || 'Login failed' });
   }
 };
 

@@ -26,20 +26,17 @@ const verifyToken = async (req, res, next) => {
   try {
     const sessionValid = await runWithTransaction(async (query) => {
       const { rowCount } = await query(
-        `
-        SELECT 1
+        `SELECT 1
         FROM user_identity u
         JOIN user_session_user su ON u.user_id = su.user_id
         JOIN user_session_identity si ON su.session_id = si.session_id
         WHERE u.user_id = $1
           AND si.session_id = $2
           AND NOT u.is_deleted
-          AND NOT su.is_deleted
           AND NOT si.is_deleted
           AND su.valid_from <= NOW()
           AND (su.valid_to IS NULL OR su.valid_to > NOW())
-        LIMIT 1
-        `,
+        LIMIT 1`,
         [uid, sid]
       );
       return rowCount > 0;
@@ -49,6 +46,7 @@ const verifyToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid or expired session.' });
     }
 
+    // Attach user info to request for downstream handlers
     req.user = { uid, sid };
     next();
   } catch (err) {
