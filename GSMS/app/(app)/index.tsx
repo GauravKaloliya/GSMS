@@ -8,18 +8,24 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
-import { getToken,logoutUser } from '../../hooks/apiClient';
+import { getToken, logoutUser } from '../../hooks/apiClient';
+import { registerForPushNotificationsAsync } from '../../services/notifications'; // adjust path if needed
 
 export default function HomeScreen() {
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuthAndRegisterNotifications = async () => {
       const token = await getToken();
       if (!token) {
         router.replace('/signin');
+        return;
       }
+      // Register for push notifications after confirming auth
+      const pushToken = await registerForPushNotificationsAsync();
+      console.log('Expo Push Token:', pushToken);
+      // TODO: send pushToken to your backend here if needed
     };
 
-    checkAuth();
+    checkAuthAndRegisterNotifications();
   }, []);
 
   const handleSignOut = async () => {

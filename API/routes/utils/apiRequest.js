@@ -143,5 +143,5 @@ async function logApiRequest(req, res, next) {
 module.exports = {
   captureRawBodyMiddleware,
   captureResponseBody,
-  logApiRequest,
+  logApiRequest
 };

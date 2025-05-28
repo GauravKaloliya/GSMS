@@ -19,8 +19,7 @@ const logAuditEvent = async (query, type, detail) => {
   return logId;
 };
 
-
-// Register
+// Register User
 const registerUser = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
@@ -28,7 +27,6 @@ const registerUser = async (req, res) => {
   }
 
   const emailHash = hashEmail(email);
-  const emailBuf = Buffer.from(email);
 
   try {
     const userId = await runWithTransaction(async (query) => {
@@ -56,29 +54,29 @@ const registerUser = async (req, res) => {
       );
       const userId = userRes.rows[0].user_id;
 
-      // 4. Insert username
+      // 4. Insert username (not encrypted here, assuming plaintext usernames)
       await query(
         `INSERT INTO user_username (user_id, username)
          VALUES ($1, $2)`,
         [userId, username]
       );
 
-      // 5. Insert email (encrypted)
+      // 5. Insert email (encrypted using crypt_user_data)
       await query(
         `INSERT INTO user_email (user_id, email, email_hash)
-         VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
-        [userId, emailBuf, emailHash]
+         VALUES ($1, crypt_user_data('encrypt', 'email', $2), $3)`,
+        [userId, email, emailHash]
       );
 
       // 6. Insert password (hashed + encrypted)
       const hashedPw = await bcrypt.hash(password, 10);
       await query(
         `INSERT INTO user_password (user_id, password_hash)
-         VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')))`,
+         VALUES ($1, crypt_user_data('encrypt', 'password', $2))`,
         [userId, hashedPw]
       );
 
-      // 7. Audit
+      // 7. Audit log success
       await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
         user_id: userId,
         username,
@@ -92,6 +90,7 @@ const registerUser = async (req, res) => {
 
     return res.status(201).json({ user_id: userId });
   } catch (e) {
+    // Audit failure
     await runWithTransaction((q) =>
       logAuditEvent(q, 'USER_REGISTER_FAILURE', {
         username,
@@ -107,6 +106,7 @@ const registerUser = async (req, res) => {
   }
 };
 
+// Login User
 const loginUser = async (req, res) => {
   const { username, email, password } = req.body;
   const ipAddress = req.ip;
@@ -138,8 +138,9 @@ const loginUser = async (req, res) => {
 
       const userId = userRes.rows[0].user_id;
 
+      // Get stored hashed password (decrypt via crypt_user_data)
       const pwRes = await query(
-        `SELECT pgp_sym_decrypt(password_hash, current_setting('pg.encrypt_key')) AS pw
+        `SELECT crypt_user_data('decrypt', 'password', password_hash) AS pw
          FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
         [userId]
       );
@@ -149,6 +150,7 @@ const loginUser = async (req, res) => {
 
       const isMatch = await bcrypt.compare(password, pwRes.rows[0].pw);
 
+      // Resolve username for audit/logging
       const usernameRes = await query(
         `SELECT username FROM user_username WHERE user_id = $1 AND valid_to IS NULL`,
         [userId]
@@ -180,30 +182,31 @@ const loginUser = async (req, res) => {
       );
       const sessionId = sessionRes.rows[0].session_id;
 
-      // Link session to user
+      // Link session to user including IP and user agent
       await query(
-        `INSERT INTO user_session_user (session_id, user_id, valid_from)
-         VALUES ($1, $2, now())`,
-        [sessionId, userId]
+        `INSERT INTO user_session_user (session_id, user_id, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4)`,
+        [sessionId, userId, ipAddress, userAgent]
       );
 
       return { userId, resolvedUsername, sessionId };
     });
 
     const token = jwt.sign(
-      { uid: userId, sid: sessionId }, 
+      { uid: userId, sid: sessionId },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
 
     return res.status(200).json({ user_id: userId, session_id: sessionId, token });
   } catch (e) {
+    // Audit login error
     await runWithTransaction((q) =>
       logAuditEvent(q, 'USER_LOGIN_ERROR', {
         username,
         email: email?.toLowerCase(),
-        ip_address: ipAddress,
-        user_agent: userAgent,
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent'),
         error: e.message,
       })
     ).catch(() => {});
@@ -213,39 +216,36 @@ const loginUser = async (req, res) => {
   }
 };
 
-const logoutUser = async (req, res) => {
-  const authHeader = req.get('Authorization');
-  const token = authHeader?.split(' ')[1];
+// Invalidate Other Sessions
+const invalidateOtherSessions = async (req, res) => {
+  const { userId } = req.body;
+  const currentIp = req.ip;
 
-  if (!token) {
-    return res.status(401).json({ error: 'Missing token' });
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID required' });
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const sessionId = payload.sid;
-
     await runWithTransaction(async (query) => {
-      await query(
-        `UPDATE user_session_user
-         SET valid_to = now()
-         WHERE session_id = $1 AND valid_to IS NULL`,
-        [sessionId]
-      );
+      await query(`
+        UPDATE user_session_user
+        SET valid_to = now()
+        WHERE user_id = $1 AND valid_to IS NULL AND ip_address <> $2
+      `, [userId, currentIp]);
 
-      await logAuditEvent(query, 'USER_LOGOUT', {
-        user_id: payload.uid,
-        session_id: sessionId,
-        ip_address: req.ip,
+      await logAuditEvent(query, 'SESSIONS_INVALIDATED_OTHERS', {
+        user_id: userId,
+        invalidated_ip_excluded: currentIp,
+        ip_address: currentIp,
         user_agent: req.get('User-Agent'),
       });
     });
 
-    return res.status(200).json({ message: 'Logged out successfully' });
+    return res.status(200).json({ message: 'Other sessions terminated successfully.' });
   } catch (e) {
-    console.error('Logout error:', e.message);
-    return res.status(400).json({ error: 'Invalid token' });
+    console.error('Invalidate other sessions error:', e.message);
+    return res.status(500).json({ error: 'Failed to invalidate other sessions' });
   }
 };
 
-module.exports = { registerUser, loginUser, logoutUser };
+module.exports = { registerUser, loginUser, invalidateOtherSessions };

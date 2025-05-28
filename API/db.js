@@ -29,13 +29,6 @@ AWS.config.update({
 
 const s3 = new AWS.S3();
 
-// ---- Encryption Key Handling ----
-function getEncryptionKey() {
-  const key = process.env.PG_ENCRYPT_KEY;
-  if (!key) throw new Error('PG_ENCRYPT_KEY environment variable is required');
-  return key;
-}
-
 // ---- Query Helpers ----
 async function query(text, params = []) {
   const client = await pool.connect();
