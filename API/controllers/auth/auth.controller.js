@@ -30,7 +30,6 @@ const registerUser = async (req, res) => {
 
   try {
     const userId = await runWithTransaction(async (query) => {
-      // 1. Ensure username is unique (ignoring expired versions)
       const userCheck = await query(
         `SELECT 1 FROM user_username WHERE username = $1 AND valid_to IS NULL`,
         [username]
@@ -39,7 +38,6 @@ const registerUser = async (req, res) => {
         throw new Error('Username already taken');
       }
 
-      // 2. Ensure email is not reused
       const emailCheck = await query(
         `SELECT 1 FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
@@ -48,35 +46,32 @@ const registerUser = async (req, res) => {
         throw new Error('Email already registered');
       }
 
-      // 3. Create user_id
       const userRes = await query(
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
       const userId = userRes.rows[0].user_id;
 
-      // 4. Insert username (not encrypted here, assuming plaintext usernames)
       await query(
         `INSERT INTO user_username (user_id, username)
          VALUES ($1, $2)`,
         [userId, username]
       );
 
-      // 5. Insert email (encrypted using crypt_user_data)
       await query(
         `INSERT INTO user_email (user_id, email, email_hash)
-         VALUES ($1, crypt_user_data('encrypt', 'email', $2::bytea), $3)`,
-        [userId, Buffer.from(email), emailHash]
-      );      
+         VALUES ($1, crypt_user_data('encrypt', 'email', $2), $3)`,
+        [userId, email, emailHash]
+      );
 
-      // 6. Insert password (hashed + encrypted)
       const hashedPw = await bcrypt.hash(password, 10);
+      
       await query(
         `INSERT INTO user_password (user_id, password_hash)
-         VALUES ($1, crypt_user_data('encrypt', 'password', $2::bytea))`,
-        [userId, Buffer.from(hashedPw)]
-      );      
+         VALUES ($1, crypt_user_data('encrypt', 'password', $2))`,
+        [userId, hashedPw]
+      );
+      
 
-      // 7. Audit log success
       await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
         user_id: userId,
         username,
@@ -90,7 +85,6 @@ const registerUser = async (req, res) => {
 
     return res.status(201).json({ user_id: userId });
   } catch (e) {
-    // Audit failure
     await runWithTransaction((q) =>
       logAuditEvent(q, 'USER_REGISTER_FAILURE', {
         username,

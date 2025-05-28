@@ -11,10 +11,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-pool.on('connect', async (client) => {
-  await client.query(`SET pg.encrypt_key = '${getEncryptionKey().replace(/'/g, "''")}'`);
-});
-
 pool.on('error', (err) => {
   console.error('Unexpected PG client error', err);
   process.exit(1);
@@ -28,13 +24,6 @@ AWS.config.update({
 });
 
 const s3 = new AWS.S3();
-
-// ---- Encryption Key Handling ----
-function getEncryptionKey() {
-  const key = process.env.PG_ENCRYPT_KEY;
-  if (!key) throw new Error('PG_ENCRYPT_KEY environment variable is required');
-  return key;
-}
 
 // ---- Query Helpers ----
 async function query(text, params = []) {
