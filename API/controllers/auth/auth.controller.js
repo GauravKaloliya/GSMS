@@ -19,6 +19,94 @@ const logAuditEvent = async (query, type, detail) => {
   return logId;
 };
 
+
+// Register
+const registerUser = async (req, res) => {
+  const { username, email, password } = req.body;
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Username, email, and password are required' });
+  }
+
+  const emailHash = hashEmail(email);
+  const emailBuf = Buffer.from(email);
+
+  try {
+    const userId = await runWithTransaction(async (query) => {
+      // 1. Ensure username is unique (ignoring expired versions)
+      const userCheck = await query(
+        `SELECT 1 FROM user_username WHERE username = $1 AND valid_to IS NULL`,
+        [username]
+      );
+      if (userCheck.rowCount > 0) {
+        throw new Error('Username already taken');
+      }
+
+      // 2. Ensure email is not reused
+      const emailCheck = await query(
+        `SELECT 1 FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
+        [emailHash]
+      );
+      if (emailCheck.rowCount > 0) {
+        throw new Error('Email already registered');
+      }
+
+      // 3. Create user_id
+      const userRes = await query(
+        `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
+      );
+      const userId = userRes.rows[0].user_id;
+
+      // 4. Insert username
+      await query(
+        `INSERT INTO user_username (user_id, username)
+         VALUES ($1, $2)`,
+        [userId, username]
+      );
+
+      // 5. Insert email (encrypted)
+      await query(
+        `INSERT INTO user_email (user_id, email, email_hash)
+         VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
+        [userId, emailBuf, emailHash]
+      );
+
+      // 6. Insert password (hashed + encrypted)
+      const hashedPw = await bcrypt.hash(password, 10);
+      await query(
+        `INSERT INTO user_password (user_id, password_hash)
+         VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')))`,
+        [userId, hashedPw]
+      );
+
+      // 7. Audit
+      await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
+        user_id: userId,
+        username,
+        email: email.toLowerCase(),
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent'),
+      });
+
+      return userId;
+    });
+
+    return res.status(201).json({ user_id: userId });
+  } catch (e) {
+    await runWithTransaction((q) =>
+      logAuditEvent(q, 'USER_REGISTER_FAILURE', {
+        username,
+        email: email?.toLowerCase(),
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent'),
+        error: e.message,
+      })
+    ).catch(() => {});
+
+    console.error('Registration error:', e.message);
+    return res.status(400).json({ error: e.message });
+  }
+};
+
 const loginUser = async (req, res) => {
   const { username, email, password } = req.body;
   const ipAddress = req.ip;
