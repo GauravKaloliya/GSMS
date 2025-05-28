@@ -143,6 +143,8 @@ export async function registerUser(
   return apiRequest<{ user_id: string }>('/register', 'POST', { username, email, password });
 }
 
+import * as Notifications from 'expo-notifications';
+
 export async function loginUser(
   credentials: { username?: string; email?: string; password: string }
 ): Promise<{ token: string; user_id: string }> {
@@ -151,8 +153,31 @@ export async function loginUser(
     'POST',
     credentials
   );
+
   await setToken(data.token);
+
+  try {
+    const { data: pushToken } = await Notifications.getExpoPushTokenAsync();
+    if (pushToken) {
+      await savePushToken(pushToken, Platform.OS);
+    }
+  } catch (err) {
+    console.warn('Push token registration failed:', err);
+  }
+
   return data;
+}
+
+export async function savePushToken(
+  pushToken: string,
+  platform: string = Platform.OS
+): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>(
+    '/push-token',
+    'POST',
+    { push_token: pushToken, platform },
+    true
+  );
 }
 
 export async function logoutUser(): Promise<void> {

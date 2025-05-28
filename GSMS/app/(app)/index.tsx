@@ -6,6 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
   Image,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { getToken, logoutUser } from '../../hooks/apiClient';
@@ -19,14 +20,28 @@ export default function HomeScreen() {
         router.replace('/signin');
         return;
       }
-      // Register for push notifications after confirming auth
-      const pushToken = await registerForPushNotificationsAsync();
-      console.log('Expo Push Token:', pushToken);
-      // TODO: send pushToken to your backend here if needed
+  
+      try {
+        const pushToken = await registerForPushNotificationsAsync();
+  
+        if (!pushToken) {
+          console.warn('Failed to get push token');
+          return;
+        }
+  
+        if (__DEV__) {
+          Alert.alert('Expo Push Token', pushToken);
+        }
+  
+        // TODO: Send pushToken to your backend here if needed
+  
+      } catch (err) {
+        console.error('Notification registration failed:', err);
+      }
     };
-
+  
     checkAuthAndRegisterNotifications();
-  }, []);
+  }, []);  
 
   const handleSignOut = async () => {
     try {
