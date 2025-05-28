@@ -270,4 +270,4 @@ const invalidateOtherSessions = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, savePushToken, logoutUser, invalidateOtherSessions };
+module.exports = { registerUser, loginUser, logoutUser, invalidateOtherSessions };
