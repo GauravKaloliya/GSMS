@@ -59,7 +59,7 @@ const registerUser = async (req, res) => {
 
       await query(
         `INSERT INTO user_email (user_id, email, email_hash)
-         VALUES ($1, crypt_user_data('encrypt', 'email', $2), $3)`,
+         VALUES ($1, crypt_user_data('encrypt', 'email', convert_to($2, 'UTF8')), $3)`,
         [userId, email, emailHash]
       );
 
@@ -67,10 +67,9 @@ const registerUser = async (req, res) => {
       
       await query(
         `INSERT INTO user_password (user_id, password_hash)
-         VALUES ($1, crypt_user_data('encrypt', 'password', $2))`,
+         VALUES ($1, crypt_user_data('encrypt', 'password', convert_to($2, 'UTF8')))`,
         [userId, hashedPw]
       );
-      
 
       await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
         user_id: userId,
