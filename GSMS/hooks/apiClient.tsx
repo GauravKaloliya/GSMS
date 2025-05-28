@@ -6,30 +6,30 @@ export type ApiResponse<T> = {
   [key: string]: any;
 } & T;
 
-const API_BASE_URL: any = process.env.API_BASE_URL;
+const API_BASE_URL: string = process.env.API_BASE_URL || 'https://gsms-ten.vercel.app/api';
 
 let cachedToken: string | null = null;
 
 // --- Token helpers ---
+
 export async function getToken(): Promise<string | null> {
   if (cachedToken) return cachedToken;
 
   try {
-    if (Platform.OS === 'web') {
-      cachedToken = localStorage.getItem('session');
-    } else {
-      cachedToken = await SecureStore.getItemAsync('session');
-    }
+    cachedToken =
+      Platform.OS === 'web'
+        ? localStorage.getItem('session')
+        : await SecureStore.getItemAsync('session');
   } catch (error) {
-    console.error('Failed to read token', error);
+    console.error('Failed to read token:', error);
     cachedToken = null;
   }
+
   return cachedToken;
 }
 
 export async function setToken(token: string): Promise<void> {
   cachedToken = token;
-
   try {
     if (Platform.OS === 'web') {
       localStorage.setItem('session', token);
@@ -37,7 +37,7 @@ export async function setToken(token: string): Promise<void> {
       await SecureStore.setItemAsync('session', token);
     }
   } catch (error) {
-    console.error('Failed to store token', error);
+    console.error('Failed to store token:', error);
   }
 }
 
@@ -50,11 +50,12 @@ export async function removeToken(): Promise<void> {
       await SecureStore.deleteItemAsync('session');
     }
   } catch (error) {
-    console.error('Failed to remove token', error);
+    console.error('Failed to remove token:', error);
   }
 }
 
 // --- API request helper ---
+
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 export async function apiRequest<T>(
@@ -100,8 +101,8 @@ export async function apiRequest<T>(
     }
 
     return data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('Request timed out');
     }
     throw error;
@@ -111,47 +112,25 @@ export async function apiRequest<T>(
 }
 
 // --- Auth API calls ---
-export async function registerUser(email: string, password: string): Promise<{ user_id: string }> {
-  return apiRequest<{ user_id: string }>('/register', 'POST', { email, password });
+
+export async function registerUser(
+  username: string,
+  email: string,
+  password: string
+): Promise<{ user_id: string }> {
+  return apiRequest<{ user_id: string }>('/register', 'POST', { username, email, password });
 }
 
-export async function loginUser(email: string, password: string): Promise<{ token: string; user_id: string }> {
-  const data = await apiRequest<{ token: string; user_id: string }>('/login', 'POST', { email, password });
+export async function loginUser(
+  credentials: { username?: string; email?: string; password: string }
+): Promise<{ token: string; user_id: string }> {
+  const data = await apiRequest<{ token: string; user_id: string }>('/login', 'POST', credentials);
   await setToken(data.token);
   return data;
 }
 
-// --- User Email ---
-export async function getCurrentEmail(): Promise<{ email: string }> {
-  return apiRequest<{ email: string }>('/user/email', 'GET', undefined, true);
-}
-
-export async function updateEmail(email: string): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>('/user/email', 'POST', { email }, true);
-}
-
-// --- User Password ---
-export async function updatePassword(password: string): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>('/user/password', 'POST', { password }, true);
-}
-
-// --- User Profile ---
-export type UserProfile = {
-  first_name?: string;
-  last_name?: string;
-  profile_image?: string;
-  phone_number?: string;
-};
-
-export async function getProfile(): Promise<UserProfile> {
-  return apiRequest<UserProfile>('/user/profile', 'GET', undefined, true);
-}
-
-export async function updateProfile(profile: UserProfile): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>('/user/profile', 'POST', profile, true);
-}
-
 // --- Logout ---
+
 export async function logout(): Promise<void> {
   await removeToken();
 }

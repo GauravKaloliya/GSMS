@@ -10,28 +10,39 @@ import {
   Keyboard,
   Animated,
   Easing,
+  ScrollView, 
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { loginUser, registerUser } from '../hooks/apiClient';
 import { router } from 'expo-router';
 
-
 export default function SignInScreen() {
-  const [email, setEmail] = useState('');
+  const [userIdentifier, setUserIdentifier] = useState(''); // for login: username or email
+  const [username, setUsername] = useState(''); // only for sign-up
+  const [email, setEmail] = useState(''); // only for sign-up
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Validation states
+  const [userIdValid, setUserIdValid] = useState<boolean | null>(null);
+  const [usernameValid, setUsernameValid] = useState<boolean | null>(null);
   const [emailValid, setEmailValid] = useState<boolean | null>(null);
   const [passwordValid, setPasswordValid] = useState<boolean | null>(null);
   const [confirmPasswordValid, setConfirmPasswordValid] = useState<boolean | null>(null);
+
   const [toggleWidth, setToggleWidth] = useState<number | null>(null);
   const indicatorPosition = useRef(new Animated.Value(0)).current;
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const usernameRegex = /^[^\s]{3,}$/;
 
   useEffect(() => {
     if (toggleWidth !== null) {
@@ -44,27 +55,44 @@ export default function SignInScreen() {
     }
   }, [mode, toggleWidth]);
 
-  const handleChange = (field: 'email' | 'password' | 'confirmPassword', value: string) => {
-    if (field === 'email') {
+  const onRefresh = () => {
+    setRefreshing(true);
+    resetForm();
+    setTimeout(() => setRefreshing(false), 500);
+  };
+
+  // Validate inputs on change
+  const handleChange = (field: string, value: string) => {
+    if (field === 'userIdentifier') {
+      setUserIdentifier(value);
+      // For login: accept anything non-empty as valid (can be username or email)
+      setUserIdValid(value.trim().length > 0);
+    } else if (field === 'username') {
+      setUsername(value);
+      setUsernameValid(usernameRegex.test(value));
+    } else if (field === 'email') {
       setEmail(value);
-      setEmailValid(value ? emailRegex.test(value) : null);
+      setEmailValid(emailRegex.test(value));
     } else if (field === 'password') {
       setPassword(value);
-      const isValid = value.length >= 6;
-      setPasswordValid(value ? isValid : null);
+      setPasswordValid(value.length >= 6);
       if (mode === 'signUp' && confirmPassword) {
         setConfirmPasswordValid(value === confirmPassword);
       }
-    } else {
+    } else if (field === 'confirmPassword') {
       setConfirmPassword(value);
-      setConfirmPasswordValid(value ? value === password : null);
+      setConfirmPasswordValid(value === password);
     }
   };
 
   const resetForm = () => {
+    setUserIdentifier('');
+    setUsername('');
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    setUserIdValid(null);
+    setUsernameValid(null);
     setEmailValid(null);
     setPasswordValid(null);
     setConfirmPasswordValid(null);
@@ -80,36 +108,44 @@ export default function SignInScreen() {
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
-    if (!emailValid || !passwordValid || (mode === 'signUp' && !confirmPasswordValid)) {
-      Alert.alert('Error', 'Please fill all fields correctly');
-      return;
+
+    if (mode === 'signIn') {
+      const trimmedIdentifier = userIdentifier.trim();
+      const isEmail = emailRegex.test(trimmedIdentifier);
+      const credentials = isEmail
+        ? { email: trimmedIdentifier, password }
+        : { username: trimmedIdentifier, password };
+    
+      console.log(credentials);
+      const data = await loginUser(credentials);
+      console.log(data);
+      if (data) {
+        Alert.alert('Success', `Welcome back, user #${data.user_id}`);
+        router.replace('/');
+      }
+      resetForm();
     }
-    setLoading(true);
-    try {
-      if (mode === 'signIn') {
-        const data = await loginUser(email, password);
-        
-        if (data) {
-          Alert.alert('Success', `Welcome back, user #${data.user_id}`);
-          router.replace('/');
-        }
-        resetForm();
-      } else {
-        const data = await registerUser(email, password);
-        Alert.alert('Success', `Account created. Your user ID is ${data.user_id}. Please sign in.`);
+    else {
+      // signUp validations:
+      if (!usernameValid || !emailValid || !passwordValid || !confirmPasswordValid) {
+        Alert.alert('Error', 'Fill all fields correctly');
+        return;
+      }
+      setLoading(true);
+      try {
+        const data = await registerUser(username.trim(), email.trim(), password);
+        Alert.alert('Success', `Account created. Your user ID is ${data.user_id}. Sign in.`);
         setMode('signIn');
         resetForm();
+      } catch (error: any) {
+        Alert.alert('Sign Up Failed', error.message || 'An error occurred');
+      } finally {
+        setLoading(false);
       }
-    } catch (error: any) {
-      Alert.alert(
-        `${mode === 'signIn' ? 'Sign In' : 'Sign Up'} Failed`,
-        error.message || 'An error occurred'
-      );
-    } finally {
-      setLoading(false);
     }
-  };  
+  };
 
+  // Validation helper text
   const renderValidationText = (valid: boolean | null, validMsg: string, invalidMsg: string) =>
     valid !== null && (
       <Text style={[styles.validationMessage, valid ? styles.validText : styles.invalidText]}>
@@ -117,25 +153,17 @@ export default function SignInScreen() {
       </Text>
     );
 
-  const renderInput = ({
-    placeholder,
-    value,
-    onChangeText,
-    isVisible,
-    toggleVisibility,
-    valid,
-    validMsg,
-    invalidMsg,
-  }: {
-    placeholder: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    isVisible: boolean;
-    toggleVisibility: () => void;
-    valid: boolean | null;
-    validMsg: string;
-    invalidMsg: string;
-  }) => (
+  // Password input with show/hide toggle
+  const renderPasswordInput = (
+    placeholder: string,
+    value: string,
+    onChangeText: (text: string) => void,
+    isVisible: boolean,
+    toggleVisibility: () => void,
+    valid: boolean | null,
+    validMsg: string,
+    invalidMsg: string
+  ) => (
     <View style={[styles.inputWrapper, valid === null && styles.marginBottomSmall]}>
       <View style={styles.inputWithIconContainer}>
         <TextInput
@@ -150,6 +178,7 @@ export default function SignInScreen() {
           onChangeText={onChangeText}
           value={value}
           placeholderTextColor="#aaa"
+          textContentType="password"
         />
         <TouchableOpacity
           onPress={toggleVisibility}
@@ -165,115 +194,171 @@ export default function SignInScreen() {
   );
 
   const isSubmitDisabled =
-    loading || !emailValid || !passwordValid || (mode === 'signUp' && !confirmPasswordValid);
+    loading ||
+    (mode === 'signIn' ? !userIdValid || !passwordValid : !usernameValid || !emailValid || !passwordValid || !confirmPasswordValid);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.topBar}>
-        <Text style={styles.companyName}>GSMS</Text>
-      </View>
-
-      <View style={styles.toggleContainer}>
-        <View
-          style={styles.toggleInner}
-          onLayout={(e) => {
-            if (!toggleWidth) setToggleWidth(e.nativeEvent.layout.width / 2);
-          }}
-        >
-          <Animated.View style={[styles.indicator, { left: indicatorPosition }]} />
-          {['signIn', 'signUp'].map((m) => (
-            <TouchableOpacity
-              key={m}
-              style={styles.toggleButton}
-              onPress={() => handleToggle(m as 'signIn' | 'signUp')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.toggleText, mode === m && styles.activeToggleText]}>
-                {m === 'signIn' ? 'Sign In' : 'Sign Up'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.topBar}>
+          <Text style={styles.companyName}>GSMS</Text>
         </View>
-      </View>
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
-          <Text style={styles.title}>{mode === 'signIn' ? 'Sign In' : 'Create Account'}</Text>
-
-          <View style={[styles.inputWrapper, emailValid === null && styles.marginBottomSmall]}>
-            <TextInput
-              style={[
-                styles.input,
-                emailValid === true && styles.inputValid,
-                emailValid === false && styles.inputInvalid,
-              ]}
-              placeholder="Email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              onChangeText={(text) => handleChange('email', text)}
-              value={email}
-              placeholderTextColor="#aaa"
-              textContentType="emailAddress"
-            />
-            {renderValidationText(emailValid, 'Valid email', 'Invalid email address')}
-          </View>
-
-          {renderInput({
-            placeholder: 'Password',
-            value: password,
-            onChangeText: (text) => handleChange('password', text),
-            isVisible: passwordVisible,
-            toggleVisibility: () => setPasswordVisible((v) => !v),
-            valid: passwordValid,
-            validMsg: 'Password looks good',
-            invalidMsg: 'Password must be at least 6 characters',
-          })}
-
-          {mode === 'signUp' &&
-            renderInput({
-              placeholder: 'Confirm Password',
-              value: confirmPassword,
-              onChangeText: (text) => handleChange('confirmPassword', text),
-              isVisible: confirmPasswordVisible,
-              toggleVisibility: () => setConfirmPasswordVisible((v) => !v),
-              valid: confirmPasswordValid,
-              validMsg: 'Passwords match',
-              invalidMsg: 'Passwords do not match',
-            })}
-
-          {mode === 'signIn' && (
-            <View style={styles.forgotPasswordContainer}>
-              <TouchableOpacity onPress={() => Alert.alert('Reset flow not implemented')} activeOpacity={0.6}>
-                <Text style={styles.forgotPassword}>Forgot Password?</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.button, isSubmitDisabled && styles.buttonDisabled]}
-            onPress={handleSubmit}
-            disabled={isSubmitDisabled}
-            activeOpacity={0.8}
+        <View style={styles.toggleContainer}>
+          <View
+            style={styles.toggleInner}
+            onLayout={(e) => {
+              if (!toggleWidth) setToggleWidth(e.nativeEvent.layout.width / 2);
+            }}
           >
-            <Text style={styles.buttonText}>
-              {loading
-                ? `${mode === 'signIn' ? 'Signing In' : 'Signing Up'}...`
-                : mode === 'signIn'
-                ? 'Sign In'
-                : 'Sign Up'}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.bottomTextContainerColumn}>
-            <Text style={styles.bottomText}>
-              {mode === 'signIn' ? "Don't have an account?" : 'Already have an account?'}
-            </Text>
-            <TouchableOpacity onPress={() => handleToggle(mode === 'signIn' ? 'signUp' : 'signIn')} activeOpacity={0.7}>
-              <Text style={styles.bottomLink}>{mode === 'signIn' ? 'Create Account' : 'Sign In'}</Text>
-            </TouchableOpacity>
+            <Animated.View style={[styles.indicator, { left: indicatorPosition }]} />
+            {['signIn', 'signUp'].map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={styles.toggleButton}
+                onPress={() => handleToggle(m as 'signIn' | 'signUp')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.toggleText, mode === m && styles.activeToggleText]}>
+                  {m === 'signIn' ? 'Sign In' : 'Sign Up'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
-      </TouchableWithoutFeedback>
+
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#3399ff"
+              colors={['#3399ff']}
+              progressBackgroundColor="#222"
+            />
+          }
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.container}>
+              <Text style={styles.title}>{mode === 'signIn' ? 'Sign In' : 'Create Account'}</Text>
+
+              {mode === 'signIn' ? (
+                <View style={[styles.inputWrapper, userIdValid === null && styles.marginBottomSmall]}>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      userIdValid === true && styles.inputValid,
+                      userIdValid === false && styles.inputInvalid,
+                    ]}
+                    placeholder="Username or Email"
+                    autoCapitalize="none"
+                    onChangeText={(text) => handleChange('userIdentifier', text)}
+                    value={userIdentifier}
+                    placeholderTextColor="#aaa"
+                    textContentType="username"
+                  />
+                  {renderValidationText(userIdValid, 'Looks good', 'Enter your username or email')}
+                </View>
+              ) : (
+                <>
+                  <View style={[styles.inputWrapper, usernameValid === null && styles.marginBottomSmall]}>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        usernameValid === true && styles.inputValid,
+                        usernameValid === false && styles.inputInvalid,
+                      ]}
+                      placeholder="Username"
+                      autoCapitalize="none"
+                      onChangeText={(text) => handleChange('username', text)}
+                      value={username}
+                      placeholderTextColor="#aaa"
+                      textContentType="username"
+                    />
+                    {renderValidationText(
+                      usernameValid,
+                      'Valid username',
+                      'Username must be at least 3 characters, no spaces'
+                    )}
+                  </View>
+
+                  <View style={[styles.inputWrapper, emailValid === null && styles.marginBottomSmall]}>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        emailValid === true && styles.inputValid,
+                        emailValid === false && styles.inputInvalid,
+                      ]}
+                      placeholder="Email"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      onChangeText={(text) => handleChange('email', text)}
+                      value={email}
+                      placeholderTextColor="#aaa"
+                      textContentType="emailAddress"
+                    />
+                    {renderValidationText(emailValid, 'Valid email', 'Invalid email address')}
+                  </View>
+                </>
+              )}
+
+              {renderPasswordInput(
+                'Password',
+                password,
+                (text) => handleChange('password', text),
+                passwordVisible,
+                () => setPasswordVisible((v) => !v),
+                passwordValid,
+                'Password looks good',
+                'Password must be at least 6 characters'
+              )}
+
+              {mode === 'signUp' &&
+                renderPasswordInput(
+                  'Confirm Password',
+                  confirmPassword,
+                  (text) => handleChange('confirmPassword', text),
+                  confirmPasswordVisible,
+                  () => setConfirmPasswordVisible((v) => !v),
+                  confirmPasswordValid,
+                  'Passwords match',
+                  'Passwords do not match'
+                )}
+
+              {mode === 'signIn' && (
+                <View style={styles.forgotPasswordContainer}>
+                  <TouchableOpacity onPress={() => Alert.alert('Reset flow not implemented')} activeOpacity={0.6}>
+                    <Text style={styles.forgotPassword}>Forgot Password?</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.button, isSubmitDisabled && styles.buttonDisabled]}
+                onPress={handleSubmit}
+                disabled={isSubmitDisabled}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>
+                  {loading
+                    ? `${mode === 'signIn' ? 'Signing In' : 'Signing Up'}...`
+                    : mode === 'signIn'
+                    ? 'Sign In'
+                    : 'Sign Up'}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.bottomTextContainerColumn}>
+                <Text style={styles.bottomText}>
+                  {mode === 'signIn' ? "Don't have an account?" : 'Already have an account?'}
+                </Text>
+                <TouchableOpacity onPress={() => handleToggle(mode === 'signIn' ? 'signUp' : 'signIn')} activeOpacity={0.7}>
+                  <Text style={styles.bottomLink}>{mode === 'signIn' ? 'Create Account' : 'Sign In'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -325,8 +410,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   container: {
+    marginTop: 100,
     width: '90%',
-    maxWidth: 320,
     alignSelf: 'center',
     flexGrow: 1,
     justifyContent: 'center',

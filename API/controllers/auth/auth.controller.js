@@ -1,24 +1,12 @@
-// Authentication handlers with integrated audit logging
-
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { runWithTransaction } = require('../../db');
 
-/**
- * Hash an email address (lower‑cased) with SHA‑256 so we can use it in equality + range constraints
- */
-const hashEmail = (email) => crypto.createHash('sha256').update(email.toLowerCase()).digest();
+// Hash email for range lookups
+const hashEmail = (email) =>
+  crypto.createHash('sha256').update(email.toLowerCase()).digest();
 
-/**
- * Generic helper to write an audit_log_identity + audit_log_event pair inside the *same* transaction
- * in which the business action occurs. This guarantees atomicity and preserves a clear
- * causal chain for forensic analysis.
- *
- * @param {Function} query  – the pg client query helper passed by runWithTransaction
- * @param {String}   type   – e.g. 'USER_REGISTER_SUCCESS'
- * @param {Object}   detail – arbitrary JSON‑serialisable object with contextual info
- */
 const logAuditEvent = async (query, type, detail) => {
   const idRes = await query(
     `INSERT INTO audit_log_identity DEFAULT VALUES RETURNING log_id`
@@ -32,106 +20,125 @@ const logAuditEvent = async (query, type, detail) => {
   return logId;
 };
 
-/**
- * Register a new user, inserting identity/email/password rows and a success/failure audit trail.
- */
+// Register
 const registerUser = async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  const { username, email, password } = req.body;
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Username, email, and password are required' });
   }
 
   const emailHash = hashEmail(email);
-  // We store the raw email encrypted with pgcrypto; convert to Buffer first.
   const emailBuf = Buffer.from(email);
 
   try {
     const userId = await runWithTransaction(async (query) => {
-      // 1. Ensure email not already in use (ignores soft‑deleted rows)
-      const existing = await query(
+      // 1. Ensure username is unique (ignoring expired versions)
+      const userCheck = await query(
+        `SELECT 1 FROM user_username WHERE username = $1 AND valid_to IS NULL`,
+        [username]
+      );
+      if (userCheck.rowCount > 0) {
+        throw new Error('Username already taken');
+      }
+
+      // 2. Ensure email is not reused
+      const emailCheck = await query(
         `SELECT 1 FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
       );
-      if (existing.rowCount > 0) {
+      if (emailCheck.rowCount > 0) {
         throw new Error('Email already registered');
       }
 
-      // 2. Insert into user_identity => get new UUID
+      // 3. Create user_id
       const userRes = await query(
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
-      const newUserId = userRes.rows[0].user_id;
+      const userId = userRes.rows[0].user_id;
 
-      // 3. Insert email (encrypted)
+      // 4. Insert username
+      await query(
+        `INSERT INTO user_username (user_id, username)
+         VALUES ($1, $2)`,
+        [userId, username]
+      );
+
+      // 5. Insert email (encrypted)
       await query(
         `INSERT INTO user_email (user_id, email, email_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
-        [newUserId, emailBuf, emailHash]
+        [userId, emailBuf, emailHash]
       );
 
-      // 4. Hash + encrypt password
+      // 6. Insert password (hashed + encrypted)
       const hashedPw = await bcrypt.hash(password, 10);
       await query(
         `INSERT INTO user_password (user_id, password_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')))`,
-        [newUserId, hashedPw]
+        [userId, hashedPw]
       );
 
-      // 5. Audit success *inside* the txn
+      // 7. Audit
       await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
-        user_id: newUserId,
+        user_id: userId,
+        username,
         email: email.toLowerCase(),
         ip_address: req.ip,
         user_agent: req.get('User-Agent'),
       });
 
-      return newUserId;
+      return userId;
     });
 
     return res.status(201).json({ user_id: userId });
   } catch (e) {
-    // Log failure in its own small transaction (we could also reuse the same pool‑client)
     await runWithTransaction((q) =>
       logAuditEvent(q, 'USER_REGISTER_FAILURE', {
-        email: email.toLowerCase(),
+        username,
+        email: email?.toLowerCase(),
         ip_address: req.ip,
         user_agent: req.get('User-Agent'),
         error: e.message,
       })
-    ).catch(() => {/* ignore secondary errors */});
+    ).catch(() => {});
 
     console.error('Registration error:', e.message);
-    return res.status(400).json({ error: e.message || 'User creation failed' });
+    return res.status(400).json({ error: e.message });
   }
 };
 
-/**
- * Login handler with audit logging for both successful and failed attempts.
- */
+// Login
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { username, email, password } = req.body;
   const ipAddress = req.ip;
   const userAgent = req.get('User-Agent');
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  if ((!username && !email) || !password) {
+    return res.status(400).json({ error: 'Username or email and password required' });
   }
 
-  const emailHash = hashEmail(email);
-
   try {
-    const { userId, isMatch } = await runWithTransaction(async (query) => {
-      // Resolve user_id (ensuring email version is current)
-      const userRes = await query(
-        `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
-        [emailHash]
-      );
+    const { userId, resolvedUsername, isMatch } = await runWithTransaction(async (query) => {
+      let userRes;
+      if (username) {
+        userRes = await query(
+          `SELECT user_id FROM user_username WHERE username = $1 AND valid_to IS NULL`,
+          [username]
+        );
+      } else {
+        const emailHash = hashEmail(email);
+        userRes = await query(
+          `SELECT user_id FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
+          [emailHash]
+        );
+      }
+
       if (userRes.rowCount === 0) {
         throw new Error('User not found');
       }
+
       const userId = userRes.rows[0].user_id;
 
-      // Pull decrypted stored password hash
       const pwRes = await query(
         `SELECT pgp_sym_decrypt(password_hash, current_setting('pg.encrypt_key')) AS pw
          FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
@@ -141,50 +148,54 @@ const loginUser = async (req, res) => {
         throw new Error('Password not set');
       }
 
+      console.log(password, pwRes.rows[0].pw);
+
       const isMatch = await bcrypt.compare(password, pwRes.rows[0].pw);
 
-      // Persist raw login attempt row (regardless of outcome)
+      const usernameRes = await query(
+        `SELECT username FROM user_username WHERE user_id = $1 AND valid_to IS NULL`,
+        [userId]
+      );
+      const resolvedUsername = usernameRes.rows[0]?.username || null;
+
       await query(
         `INSERT INTO user_login_attempt (user_id, success, ip_address, user_agent)
          VALUES ($1, $2, $3, $4)`,
         [userId, isMatch, ipAddress, userAgent]
       );
 
-      // Audit login attempt
       await logAuditEvent(query, isMatch ? 'USER_LOGIN_SUCCESS' : 'USER_LOGIN_FAILURE', {
         user_id: userId,
-        email: email.toLowerCase(),
+        username: resolvedUsername,
+        email: email?.toLowerCase(),
         ip_address: ipAddress,
         user_agent: userAgent,
       });
 
       if (!isMatch) {
-        // By throwing after audit, we rollback the txn but *audit remains* (because audit is inside the txn)
         throw new Error('Invalid credentials');
       }
 
-      return { userId, isMatch };
+      return { userId, resolvedUsername, isMatch };
     });
 
-    // On success, create a signed JWT – NB: payload uses `uid` for compatibility
     const token = jwt.sign(
       { uid: userId },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
 
-    return res.status(200).json({ user_id: userId, token });
+    return res.status(200).json({ user_id: userId, username: resolvedUsername, token });
   } catch (e) {
-    // For errors *not* thrown inside the main transaction (e.g. connection issues),
-    // record a coarse‑grained audit entry.
     await runWithTransaction((q) =>
       logAuditEvent(q, 'USER_LOGIN_ERROR', {
-        email: email.toLowerCase(),
+        username,
+        email: email?.toLowerCase(),
         ip_address: ipAddress,
         user_agent: userAgent,
         error: e.message,
       })
-    ).catch(() => {/* ignore secondary errors */});
+    ).catch(() => {});
 
     console.error('Login error:', e.message);
     return res.status(401).json({ error: e.message || 'Login failed' });
