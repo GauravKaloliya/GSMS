@@ -3,12 +3,14 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { runWithTransaction } = require('../../db');
 
-// --- Utilities ---
+// Hash email for range lookups
 const hashEmail = (email) =>
   crypto.createHash('sha256').update(email.toLowerCase()).digest();
 
 const logAuditEvent = async (query, type, detail) => {
-  const idRes = await query(`INSERT INTO audit_log_identity DEFAULT VALUES RETURNING log_id`);
+  const idRes = await query(
+    `INSERT INTO audit_log_identity DEFAULT VALUES RETURNING log_id`
+  );
   const logId = idRes.rows[0].log_id;
   await query(
     `INSERT INTO audit_log_event (log_id, event_time, event_type, event_details)
@@ -18,10 +20,9 @@ const logAuditEvent = async (query, type, detail) => {
   return logId;
 };
 
-// --- Registration Handler ---
+// Register
 const registerUser = async (req, res) => {
   const { username, email, password } = req.body;
-
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email, and password are required' });
   }
@@ -31,35 +32,45 @@ const registerUser = async (req, res) => {
 
   try {
     const userId = await runWithTransaction(async (query) => {
+      // 1. Ensure username is unique (ignoring expired versions)
       const userCheck = await query(
         `SELECT 1 FROM user_username WHERE username = $1 AND valid_to IS NULL`,
         [username]
       );
-      if (userCheck.rowCount > 0) throw new Error('Username already taken');
+      if (userCheck.rowCount > 0) {
+        throw new Error('Username already taken');
+      }
 
+      // 2. Ensure email is not reused
       const emailCheck = await query(
         `SELECT 1 FROM user_email WHERE email_hash = $1 AND valid_to IS NULL`,
         [emailHash]
       );
-      if (emailCheck.rowCount > 0) throw new Error('Email already registered');
+      if (emailCheck.rowCount > 0) {
+        throw new Error('Email already registered');
+      }
 
+      // 3. Create user_id
       const userRes = await query(
         `INSERT INTO user_identity DEFAULT VALUES RETURNING user_id`
       );
       const userId = userRes.rows[0].user_id;
 
+      // 4. Insert username
       await query(
         `INSERT INTO user_username (user_id, username)
          VALUES ($1, $2)`,
         [userId, username]
       );
 
+      // 5. Insert email (encrypted)
       await query(
         `INSERT INTO user_email (user_id, email, email_hash)
          VALUES ($1, pgp_sym_encrypt($2, current_setting('pg.encrypt_key')), $3)`,
         [userId, emailBuf, emailHash]
       );
 
+      // 6. Insert password (hashed + encrypted)
       const hashedPw = await bcrypt.hash(password, 10);
       await query(
         `INSERT INTO user_password (user_id, password_hash)
@@ -67,6 +78,7 @@ const registerUser = async (req, res) => {
         [userId, hashedPw]
       );
 
+      // 7. Audit
       await logAuditEvent(query, 'USER_REGISTER_SUCCESS', {
         user_id: userId,
         username,
@@ -95,7 +107,7 @@ const registerUser = async (req, res) => {
   }
 };
 
-// --- Login Handler ---
+// Login
 const loginUser = async (req, res) => {
   const { username, email, password } = req.body;
   const ipAddress = req.ip;
@@ -106,7 +118,7 @@ const loginUser = async (req, res) => {
   }
 
   try {
-    const { userId, resolvedUsername } = await runWithTransaction(async (query) => {
+    const { userId, resolvedUsername, isMatch } = await runWithTransaction(async (query) => {
       let userRes;
       if (username) {
         userRes = await query(
@@ -121,7 +133,10 @@ const loginUser = async (req, res) => {
         );
       }
 
-      if (userRes.rowCount === 0) throw new Error('User not found');
+      if (userRes.rowCount === 0) {
+        throw new Error('User not found');
+      }
+
       const userId = userRes.rows[0].user_id;
 
       const pwRes = await query(
@@ -129,12 +144,13 @@ const loginUser = async (req, res) => {
          FROM user_password WHERE user_id = $1 AND valid_to IS NULL`,
         [userId]
       );
+      if (pwRes.rowCount === 0) {
+        throw new Error('Password not set');
+      }
 
-      if (pwRes.rowCount === 0 || !pwRes.rows[0].pw) throw new Error('Password not set or decryption failed');
+      console.log(password, pwRes.rows[0].pw);
 
-      const decryptedHash = pwRes.rows[0].pw;
-
-      const isMatch = await bcrypt.compare(password, decryptedHash);
+      const isMatch = await bcrypt.compare(password, pwRes.rows[0].pw);
 
       const usernameRes = await query(
         `SELECT username FROM user_username WHERE user_id = $1 AND valid_to IS NULL`,
@@ -156,14 +172,18 @@ const loginUser = async (req, res) => {
         user_agent: userAgent,
       });
 
-      if (!isMatch) throw new Error('Invalid credentials');
+      if (!isMatch) {
+        throw new Error('Invalid credentials');
+      }
 
-      return { userId, resolvedUsername };
+      return { userId, resolvedUsername, isMatch };
     });
 
-    const token = jwt.sign({ uid: userId }, process.env.JWT_SECRET, {
-      expiresIn: '1d',
-    });
+    const token = jwt.sign(
+      { uid: userId },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
 
     return res.status(200).json({ user_id: userId, username: resolvedUsername, token });
   } catch (e) {
