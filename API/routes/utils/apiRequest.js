@@ -23,7 +23,7 @@ function compressIfLarge(buffer) {
   }
 }
 
-// New middleware: capture raw body BEFORE JSON parsing
+// Middleware to capture raw request body BEFORE JSON parsing
 function captureRawBodyMiddleware(req, res, next) {
   const chunks = [];
   let length = 0;
@@ -48,6 +48,7 @@ function captureRawBodyMiddleware(req, res, next) {
   });
 }
 
+// Middleware to capture response body up to a max size
 function captureResponseBody(req, res, next) {
   const chunks = [];
   let totalLength = 0;
@@ -81,11 +82,11 @@ function captureResponseBody(req, res, next) {
   next();
 }
 
+// Main middleware to log API request and response to DB after response finished
 async function logApiRequest(req, res, next) {
   const requestId = uuidv4();
   const startTime = Date.now();
 
-  // Wait for response finish event
   onFinished(res, async () => {
     try {
       const endTime = Date.now();
@@ -95,8 +96,6 @@ async function logApiRequest(req, res, next) {
 
       const resBody = res.locals.responseBody || Buffer.alloc(0);
       const compressedResBody = compressIfLarge(resBody);
-
-      console.log(`[${endTime - startTime}ms] ${req.method} ${req.originalUrl} ${res.statusCode}`);
 
       await runWithTransaction(async (query) => {
         await query(`INSERT INTO api_request (request_id) VALUES ($1)`, [requestId]);
@@ -143,5 +142,5 @@ async function logApiRequest(req, res, next) {
 module.exports = {
   captureRawBodyMiddleware,
   captureResponseBody,
-  logApiRequest
+  logApiRequest,
 };
