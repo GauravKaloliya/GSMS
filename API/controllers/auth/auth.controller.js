@@ -118,7 +118,7 @@ const loginUser = async (req, res) => {
   }
 
   try {
-    const { userId, resolvedUsername, isMatch } = await runWithTransaction(async (query) => {
+    const { userId, resolvedUsername } = await runWithTransaction(async (query) => {
       let userRes;
       if (username) {
         userRes = await query(
@@ -147,8 +147,6 @@ const loginUser = async (req, res) => {
       if (pwRes.rowCount === 0) {
         throw new Error('Password not set');
       }
-
-      console.log(password, pwRes.rows[0].pw);
 
       const isMatch = await bcrypt.compare(password, pwRes.rows[0].pw);
 
