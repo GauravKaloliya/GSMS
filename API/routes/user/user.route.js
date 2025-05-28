@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { savePushToken } = require('../user/user.controller');
+const { savePushToken } = require('../../controllers/user/user.controller');
 
 router
   .post('/push-token', savePushToken);
