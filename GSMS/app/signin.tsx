@@ -116,14 +116,20 @@ export default function SignInScreen() {
         ? { email: trimmedIdentifier, password }
         : { username: trimmedIdentifier, password };
     
-      console.log(credentials);
-      const data = await loginUser(credentials);
-      console.log(data);
-      if (data) {
-        Alert.alert('Success', `Welcome back, user #${data.user_id}`);
-        router.replace('/');
-      }
-      resetForm();
+        try {
+          const data = await loginUser(credentials);
+          if (data) {
+            Alert.alert('Success', `Welcome back, user #${data.user_id}`);
+            router.replace('/');
+          } else {
+            Alert.alert('Sign In Failed', 'Invalid username/email or password.');
+          }
+        } catch (error: any) {
+          Alert.alert('Sign In Failed', error.message || 'An error occurred during sign in.');
+        } finally {
+          setLoading(false);
+          resetForm();
+        }
     }
     else {
       // signUp validations:
