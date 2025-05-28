@@ -1,4 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
+import * as Notifications from 'expo-notifications';
+
 import { Platform } from 'react-native';
 import { jwtDecode } from 'jwt-decode';
 
@@ -142,8 +144,6 @@ export async function registerUser(
 ): Promise<{ user_id: string }> {
   return apiRequest<{ user_id: string }>('/register', 'POST', { username, email, password });
 }
-
-import * as Notifications from 'expo-notifications';
 
 export async function loginUser(
   credentials: { username?: string; email?: string; password: string }

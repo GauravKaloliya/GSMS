@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { savePushToken } = require('../../controllers/user/user.controller');
+const { savePushToken, sendNotificationHandler } = require('../../controllers/user/user.controller');
 
 router
-  .post('/push-token', savePushToken);
+  .post('/push-token', savePushToken)
+  .post('/send-notification', sendNotificationHandler);
 
 module.exports = router;
