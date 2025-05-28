@@ -6,12 +6,11 @@ export type ApiResponse<T> = {
   [key: string]: any;
 } & T;
 
-const API_BASE_URL: string = process.env.API_BASE_URL || 'https://gsms-ten.vercel.app/api';
+const API_BASE_URL: any = process.env.API_BASE_URL;
 
-// ---- In-memory token cache ----
 let cachedToken: string | null = null;
 
-// ---- Token helpers ----
+// --- Token helpers ---
 export async function getToken(): Promise<string | null> {
   if (cachedToken) return cachedToken;
 
@@ -21,8 +20,8 @@ export async function getToken(): Promise<string | null> {
     } else {
       cachedToken = await SecureStore.getItemAsync('session');
     }
-  } catch (err) {
-    console.error('Failed to read token', err);
+  } catch (error) {
+    console.error('Failed to read token', error);
     cachedToken = null;
   }
   return cachedToken;
@@ -37,8 +36,8 @@ export async function setToken(token: string): Promise<void> {
     } else {
       await SecureStore.setItemAsync('session', token);
     }
-  } catch (err) {
-    console.error('Failed to store token', err);
+  } catch (error) {
+    console.error('Failed to store token', error);
   }
 }
 
@@ -50,18 +49,18 @@ export async function removeToken(): Promise<void> {
     } else {
       await SecureStore.deleteItemAsync('session');
     }
-  } catch (err) {
-    console.error('Failed to remove token', err);
+  } catch (error) {
+    console.error('Failed to remove token', error);
   }
 }
 
-// ---- General API request helper ----
+// --- API request helper ---
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 export async function apiRequest<T>(
   endpoint: string,
   method: HttpMethod = 'GET',
-  body?: any,
+  body?: unknown,
   authRequired = false,
   timeoutMs = 10000
 ): Promise<T> {
@@ -101,38 +100,28 @@ export async function apiRequest<T>(
     }
 
     return data;
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
       throw new Error('Request timed out');
     }
-    throw err;
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-// ---- Auth API calls ----
-export async function registerUser(
-  email: string,
-  password: string
-): Promise<{ user_id: string }> {
+// --- Auth API calls ---
+export async function registerUser(email: string, password: string): Promise<{ user_id: string }> {
   return apiRequest<{ user_id: string }>('/register', 'POST', { email, password });
 }
 
-export async function loginUser(
-  email: string,
-  password: string
-): Promise<{ token: string; user_id: string }> {
-  const data = await apiRequest<{ token: string; user_id: string }>(
-    '/login',
-    'POST',
-    { email, password }
-  );
+export async function loginUser(email: string, password: string): Promise<{ token: string; user_id: string }> {
+  const data = await apiRequest<{ token: string; user_id: string }>('/login', 'POST', { email, password });
   await setToken(data.token);
   return data;
 }
 
-// ---- User Email ----
+// --- User Email ---
 export async function getCurrentEmail(): Promise<{ email: string }> {
   return apiRequest<{ email: string }>('/user/email', 'GET', undefined, true);
 }
@@ -141,12 +130,12 @@ export async function updateEmail(email: string): Promise<{ message: string }> {
   return apiRequest<{ message: string }>('/user/email', 'POST', { email }, true);
 }
 
-// ---- User Password ----
+// --- User Password ---
 export async function updatePassword(password: string): Promise<{ message: string }> {
   return apiRequest<{ message: string }>('/user/password', 'POST', { password }, true);
 }
 
-// ---- User Profile ----
+// --- User Profile ---
 export type UserProfile = {
   first_name?: string;
   last_name?: string;
@@ -162,6 +151,7 @@ export async function updateProfile(profile: UserProfile): Promise<{ message: st
   return apiRequest<{ message: string }>('/user/profile', 'POST', profile, true);
 }
 
+// --- Logout ---
 export async function logout(): Promise<void> {
   await removeToken();
 }
