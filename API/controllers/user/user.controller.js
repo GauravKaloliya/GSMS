@@ -66,11 +66,21 @@ const sendNotification = async (userId, notificationPayload) => {
 
     const messages = validTokens.map(({ push_token, platform }) => ({
       to: push_token,
-      sound: 'default',
+      sound: notificationPayload.sound || 'default',
+      badge: notificationPayload.badge || 1,
       title: notificationPayload.title,
       body: notificationPayload.body,
       data: notificationPayload.data || {},
-      ...(platform === 'android' && { priority: 'high' }), // example customization
+      priority: notificationPayload.priority || (platform === 'android' ? 'high' : undefined),
+      ...(platform === 'android' && {
+        channelId: notificationPayload.channelId || 'default',
+        color: notificationPayload.color || '#FF231F7C',
+        vibrationPattern: notificationPayload.vibrationPattern || [0, 250, 250, 250],
+      }),
+      ...(platform === 'ios' && {
+        categoryId: notificationPayload.categoryId,
+        threadId: notificationPayload.threadId,
+      }),
     }));
 
     const chunks = expo.chunkPushNotifications(messages);
@@ -105,7 +115,6 @@ const sendNotification = async (userId, notificationPayload) => {
       }
     }
 
-    // Optional: Log the notification send event
     await runWithTransaction(async (query) => {
       await logAuditEvent(query, 'PUSH_NOTIFICATION_SENT', {
         user_id: userId,
@@ -119,25 +128,33 @@ const sendNotification = async (userId, notificationPayload) => {
 };
 
 const sendNotificationHandler = async (req, res) => {
-    const { user_id, title, body, data } = req.body;
-  
-    if (!user_id || !title || !body) {
-      return res.status(400).json({ error: 'user_id, title, and body are required' });
-    }
-  
-    try {
-      await sendNotification(user_id, {
-        title,
-        body,
-        data: data || {},
-      });
-  
-      return res.status(200).json({ message: 'Notification sent successfully' });
-    } catch (error) {
-      console.error('sendNotificationHandler error:', error.message);
-      return res.status(500).json({ error: 'Failed to send notification' });
-    }
-  };
+  const { user_id, title, body, data, sound, badge, priority, channelId, color, vibrationPattern, categoryId, threadId } = req.body;
+
+  if (!user_id || !title || !body) {
+    return res.status(400).json({ error: 'user_id, title, and body are required' });
+  }
+
+  try {
+    await sendNotification(user_id, {
+      title,
+      body,
+      data: data || {},
+      sound,
+      badge,
+      priority,
+      channelId,
+      color,
+      vibrationPattern,
+      categoryId,
+      threadId,
+    });
+
+    return res.status(200).json({ message: 'Notification sent successfully' });
+  } catch (error) {
+    console.error('sendNotificationHandler error:', error.message);
+    return res.status(500).json({ error: 'Failed to send notification' });
+  }
+};
 
 module.exports = {
   savePushToken,
