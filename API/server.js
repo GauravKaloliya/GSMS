@@ -24,6 +24,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Serve login.html for /login route
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
 // API Routes
 app.use('/api', authRoutes);
 app.use(middleware); // middleware applied after /api
