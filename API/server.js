@@ -21,7 +21,7 @@ app.use('/api/user', userRoutes);
 
 app.use(express.static(path.join(__dirname, 'client', 'dist')));
 
-app.get('/:path(*)', (req, res) => {
+app.get('/*.*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Not found' });
   }
