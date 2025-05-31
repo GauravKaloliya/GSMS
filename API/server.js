@@ -16,11 +16,6 @@ app.use(express.json());
 app.use(captureResponseBody);
 app.use(logApiRequest);
 
-// API Routes — put these first
-app.use('/api', authRoutes);
-app.use(middleware);
-app.use('/api/user', userRoutes);
-
 // Serve React static files
 app.use(express.static(path.join(__dirname, 'client', 'dist')));
 
@@ -30,6 +25,11 @@ app.get('/', (req, res) => {
 });
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+
+// API Routes — put these first
+app.use('/api', authRoutes);
+app.use(middleware);
+app.use('/api/user', userRoutes);
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
