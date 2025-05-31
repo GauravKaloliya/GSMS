@@ -16,19 +16,21 @@ app.use(express.json());
 app.use(captureResponseBody);
 app.use(logApiRequest);
 
-app.use(express.static(path.join(__dirname, 'client', 'dist'))); 
-
-// Catch-all route to React
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
-});
-
-// API Routes
+// API Routes — put these first
 app.use('/api', authRoutes);
 app.use(middleware);
 app.use('/api/user', userRoutes);
 
-// Start server
+// Serve React static files
+app.use(express.static(path.join(__dirname, 'client', 'dist')));
+
+// React catch-all (for SPA routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
+});
+
+app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
