@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 
 const { captureResponseBody, logApiRequest } = require('./routes/utils/apiRequest');
 const middleware = require('./routes/utils/middleware');
@@ -18,15 +17,6 @@ app.use(logApiRequest);
 app.use('/api', authRoutes);
 app.use(middleware);
 app.use('/api/user', userRoutes);
-
-app.use(express.static(path.join(__dirname, 'client', 'dist')));
-
-app.get('/*', (req, res) => {
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ error: 'Not found' });
-  }
-  res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
-});
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
