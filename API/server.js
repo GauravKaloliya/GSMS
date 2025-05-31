@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-
 const { captureResponseBody, logApiRequest } = require('./routes/utils/apiRequest');
 const middleware = require('./routes/utils/middleware');
 const authRoutes = require('./routes/auth/auth.route');
@@ -11,14 +10,16 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
 app.use(captureResponseBody);
 app.use(logApiRequest);
+
+app.get('/', (req, res) => res.send('API Server Running'));
 
 app.use('/api', authRoutes);
 app.use(middleware);
 app.use('/api/user', userRoutes);
 
-app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
