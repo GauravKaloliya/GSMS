@@ -25,7 +25,7 @@ app.use('/api/user', userRoutes);
 app.use(express.static(path.join(__dirname, 'client', 'dist')));
 
 // React catch-all (for SPA routing)
-app.get('*', (req, res) => {
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
 });
 
