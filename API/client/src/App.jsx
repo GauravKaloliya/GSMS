@@ -2,11 +2,7 @@ import './App.css'
 
 function App() {
   return (
-    <>
-      <div>
-        <p>Hello World</p>
-      </div>
-    </>
+    <p>Hello World</p>
   )
 }
 
