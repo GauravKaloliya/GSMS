@@ -31,7 +31,7 @@ app.get('/login', (req, res) => {
 
 // API Routes
 app.use('/api', authRoutes);
-app.use(middleware); // middleware applied after /api
+app.use(middleware);
 app.use('/api/user', userRoutes);
 
 // Start server
